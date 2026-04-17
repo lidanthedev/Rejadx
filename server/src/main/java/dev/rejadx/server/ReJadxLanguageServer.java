@@ -46,8 +46,9 @@ public class ReJadxLanguageServer implements LanguageServer, LanguageClientAware
     public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
         ServerCapabilities caps = new ServerCapabilities();
 
-        // Virtual documents are never edited — we only care about didOpen.
-        caps.setTextDocumentSync(TextDocumentSyncKind.None);
+        // Virtual documents are read-only, but we still need open notifications
+        // to trigger async decompilation and sourceReady pushes.
+        caps.setTextDocumentSync(TextDocumentSyncKind.Full);
 
         // Standard LSP features routed through jadx-core
         caps.setReferencesProvider(true);

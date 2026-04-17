@@ -11,16 +11,52 @@ interface SourceReadyParams {
 
 class JadxContentProvider implements vscode.TextDocumentContentProvider {
   private readonly _cache = new Map<string, string>();
+  private readonly _inflight = new Map<string, Thenable<string>>();
   readonly onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
   readonly onDidChange = this.onDidChangeEmitter.event;
 
   update(uriStr: string, content: string): void {
-    this._cache.set(uriStr, content);
-    this.onDidChangeEmitter.fire(vscode.Uri.parse(uriStr));
+    const normalized = vscode.Uri.parse(uriStr).toString();
+    this._cache.set(normalized, content);
+    this.onDidChangeEmitter.fire(vscode.Uri.parse(normalized));
   }
 
-  provideTextDocumentContent(uri: vscode.Uri): string {
-    return this._cache.get(uri.toString()) ?? '// Loading...';
+  provideTextDocumentContent(uri: vscode.Uri): string | Thenable<string> {
+    const key = uri.toString();
+    const cached = this._cache.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const lc = getClient();
+    if (!lc) {
+      return '// Loading...';
+    }
+
+    const pending = this._inflight.get(key);
+    if (pending) {
+      return pending;
+    }
+
+    const request = lc.sendRequest('workspace/executeCommand', {
+      command: 'rejadx.getSource',
+      arguments: [key]
+    }).then((res) => {
+      const content = typeof res === 'string'
+        ? res
+        : (res as { content?: string } | undefined)?.content ?? '// Empty source';
+      this.update(key, content);
+      return content;
+    }).catch((err) => {
+      const message = `// Failed to load source: ${err instanceof Error ? err.message : String(err)}`;
+      this.update(key, message);
+      return message;
+    }).finally(() => {
+      this._inflight.delete(key);
+    });
+
+    this._inflight.set(key, request);
+    return request;
   }
 }
 
