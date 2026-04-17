@@ -1,34 +1,57 @@
 package dev.rejadx.server;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
+
 import org.eclipse.lsp4j.DidChangeConfigurationParams;
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
-import org.eclipse.lsp4j.services.LanguageClient;
+import org.eclipse.lsp4j.ExecuteCommandParams;
 import org.eclipse.lsp4j.services.WorkspaceService;
 
-/**
- * Stub WorkspaceService.
- *
- * Will handle workspace/executeCommand requests in future milestones:
- *   - rejadx.openApk    → load an APK/jadx project into JadxDecompiler
- *   - rejadx.getClasses → return the class hierarchy to the ClassTreeProvider
- *   - rejadx.rename     → delegate F2 rename to Jadx's node tree + project.save()
- */
+import dev.rejadx.server.client.ReJadxClient;
+import dev.rejadx.server.commands.AddCommentCommand;
+import dev.rejadx.server.commands.GetPackagesCommand;
+import dev.rejadx.server.commands.GetSourceCommand;
+import dev.rejadx.server.commands.LoadProjectCommand;
+import dev.rejadx.server.commands.SaveProjectCommand;
+import dev.rejadx.server.manager.DecompilerManager;
+
 public class ReJadxWorkspaceService implements WorkspaceService {
 
-    @SuppressWarnings("unused")
-    private LanguageClient client;
+    private final Map<String, Function<List<Object>, CompletableFuture<Object>>> commands = new HashMap<>();
 
-    public void setClient(LanguageClient client) {
-        this.client = client;
+    public ReJadxWorkspaceService(DecompilerManager manager) {
+        commands.put("rejadx.loadProject",  new LoadProjectCommand(manager)::execute);
+        commands.put("rejadx.getPackages",  new GetPackagesCommand(manager)::execute);
+        commands.put("rejadx.getSource",    new GetSourceCommand(manager)::execute);
+        commands.put("rejadx.addComment",   new AddCommentCommand(manager)::execute);
+        commands.put("rejadx.saveProject",  new SaveProjectCommand(manager)::execute);
+    }
+
+    public void setClient(ReJadxClient client) {
+        // Reserved for future use (e.g., sending progress notifications)
+    }
+
+    @Override
+    public CompletableFuture<Object> executeCommand(ExecuteCommandParams params) {
+        var handler = commands.get(params.getCommand());
+        if (handler == null) {
+            return CompletableFuture.failedFuture(
+                    new IllegalArgumentException("Unknown command: " + params.getCommand()));
+        }
+        return handler.apply(params.getArguments());
     }
 
     @Override
     public void didChangeConfiguration(DidChangeConfigurationParams params) {
-        // TODO: react to VS Code settings changes (e.g., jadx decompilation mode)
+        // TODO: react to VS Code settings changes (e.g., jadx decompilation threads)
     }
 
     @Override
     public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {
-        // Not watching real files; VFS only.
+        // VFS only — no file watching.
     }
 }

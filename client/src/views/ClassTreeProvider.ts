@@ -1,23 +1,28 @@
 import * as vscode from 'vscode';
 
-export type ClassTreeItemKind = 'package' | 'class';
+export interface PackageNode {
+  name: string;
+  fullName: string;
+  uri: string | null;
+  isPackage: boolean;
+  children: PackageNode[];
+}
 
-export class ClassTreeItem extends vscode.TreeItem {
-  constructor(
-    public readonly label: string,
-    public readonly kind: ClassTreeItemKind,
-    public readonly fullName: string,
-    collapsibleState: vscode.TreeItemCollapsibleState
-  ) {
-    super(label, collapsibleState);
-    this.tooltip = fullName;
-    this.contextValue = kind;
-    if (kind === 'class') {
+class ClassTreeItem extends vscode.TreeItem {
+  constructor(public readonly node: PackageNode) {
+    super(
+      node.name,
+      node.children.length > 0
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None
+    );
+    this.tooltip = node.fullName;
+    this.contextValue = node.isPackage ? 'package' : 'class';
+    if (!node.isPackage && node.uri) {
       this.command = {
         command: 'vscode.open',
         title: 'Open Class',
-        // Opens as a virtual jadx:// document — never writes to disk.
-        arguments: [vscode.Uri.parse(`jadx://class/${encodeURIComponent(fullName)}`)],
+        arguments: [vscode.Uri.parse(node.uri)],
       };
     }
   }
@@ -27,22 +32,19 @@ export class ClassTreeProvider implements vscode.TreeDataProvider<ClassTreeItem>
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<ClassTreeItem | undefined | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-  private _roots: ClassTreeItem[] = [];
+  private _roots: PackageNode[] = [];
 
   getTreeItem(element: ClassTreeItem): vscode.TreeItem {
     return element;
   }
 
   getChildren(element?: ClassTreeItem): ClassTreeItem[] {
-    // Top-level returns roots; children populated via setRoots() from LSP responses.
-    if (!element) {
-      return this._roots;
-    }
-    return [];
+    const nodes = element ? element.node.children : this._roots;
+    return nodes.map(n => new ClassTreeItem(n));
   }
 
-  setRoots(items: ClassTreeItem[]): void {
-    this._roots = items;
+  setRoots(roots: PackageNode[]): void {
+    this._roots = roots;
     this._onDidChangeTreeData.fire();
   }
 

@@ -6,13 +6,11 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 import org.eclipse.lsp4j.jsonrpc.Launcher;
-import org.eclipse.lsp4j.launch.LSPLauncher;
-import org.eclipse.lsp4j.services.LanguageClient;
+
+import dev.rejadx.server.client.ReJadxClient;
 
 /**
- * Entry point. Communication is exclusively over stdin/stdout so that
- * vscode-languageclient can attach via stdio transport.
- *
+ * Entry point. Communication is exclusively over stdin/stdout (stdio transport).
  * System.out is redirected to stderr BEFORE the launcher is built so that any
  * stray println() from jadx internals cannot corrupt the JSON-RPC byte stream.
  */
@@ -22,12 +20,19 @@ public class ReJadxServer {
         InputStream  in  = System.in;
         OutputStream out = System.out;
 
-        // Redirect stdout so accidental prints do not corrupt the JSON-RPC stream.
+        // Must happen before Launcher construction — any print after this goes to stderr.
         System.setOut(System.err);
 
         ReJadxLanguageServer server = new ReJadxLanguageServer();
 
-        Launcher<LanguageClient> launcher = LSPLauncher.createServerLauncher(server, in, out);
+        // Use Launcher.Builder so LSP4J generates a ReJadxClient proxy that includes
+        // our custom @JsonNotification methods (sourceReady, telemetry).
+        Launcher<ReJadxClient> launcher = new Launcher.Builder<ReJadxClient>()
+                .setRemoteInterface(ReJadxClient.class)
+                .setLocalService(server)
+                .setInput(in)
+                .setOutput(out)
+                .create();
 
         server.connect(launcher.getRemoteProxy());
 
