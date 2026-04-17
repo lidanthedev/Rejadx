@@ -67,9 +67,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const result = await lc.sendRequest('workspace/executeCommand', {
         command: 'rejadx.loadProject',
         arguments: [apkPath]
-      }) as { classCount: number };
+      }) as { classCount?: number; loaded: boolean; error?: string };
 
-      dashboardProvider.notifyProjectLoaded(result.classCount);
+      if (!result.loaded) {
+        const reason = result.error ?? 'Failed to load project';
+        dashboardProvider.notifyProjectLoadFailed(reason);
+        vscode.window.showErrorMessage(`ReJadx: ${reason}`);
+        return;
+      }
+
+      dashboardProvider.notifyProjectLoaded(result.classCount ?? 0);
 
       const packages = await lc.sendRequest('workspace/executeCommand', {
         command: 'rejadx.getPackages',

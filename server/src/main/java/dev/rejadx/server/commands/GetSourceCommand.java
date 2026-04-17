@@ -24,7 +24,7 @@ public class GetSourceCommand {
             return CompletableFuture.failedFuture(new IllegalArgumentException("rejadx.getSource requires a URI argument"));
         }
 
-        String uri = args.get(0).toString();
+        String uri = CommandArgs.requireString(args, 0, "rejadx.getSource requires a URI argument");
 
         return CompletableFuture.supplyAsync(() -> {
             JadxUriParser.ParsedUri parsed = JadxUriParser.parse(uri);

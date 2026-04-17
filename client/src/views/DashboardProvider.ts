@@ -55,6 +55,10 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     this._view?.webview.postMessage({ command: 'projectLoaded', classCount });
   }
 
+  notifyProjectLoadFailed(message: string): void {
+    this._view?.webview.postMessage({ command: 'projectLoadFailed', message });
+  }
+
   updateTelemetry(params: TelemetryUpdate): void {
     this._view?.webview.postMessage({ command: 'telemetry', ...params });
   }
@@ -185,6 +189,9 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         document.getElementById('init').style.display = 'none';
         document.getElementById('dash').style.display = 'block';
         document.getElementById('class-count').textContent = msg.classCount;
+      } else if (msg.command === 'projectLoadFailed') {
+        document.getElementById('init-status').textContent = msg.message;
+        document.getElementById('open-btn').disabled = false;
       } else if (msg.command === 'telemetry') {
         const pct = msg.heapMaxBytes > 0 ? (msg.heapUsedBytes / msg.heapMaxBytes * 100) : 0;
         const fill = document.getElementById('mem-fill');

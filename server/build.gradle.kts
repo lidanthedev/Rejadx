@@ -1,4 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.gradle.api.file.DuplicatesStrategy
 
 plugins {
     java
@@ -29,6 +30,21 @@ dependencies {
     // The Maven coordinate is transparently replaced with the :jadx-core source project.
     implementation("io.github.skylot:jadx-core")
 
+    // Input + analysis plugins are loaded via ServiceLoader at runtime.
+    // Without these on runtimeClasspath, APK loading can appear to work but only
+    // trivial/resource classes are visible (no full dex class graph).
+    runtimeOnly("io.github.skylot:jadx-dex-input")
+    runtimeOnly("io.github.skylot:jadx-java-input")
+    runtimeOnly("io.github.skylot:jadx-java-convert")
+    runtimeOnly("io.github.skylot:jadx-smali-input")
+    runtimeOnly("io.github.skylot:jadx-rename-mappings")
+    runtimeOnly("io.github.skylot:jadx-kotlin-metadata")
+    runtimeOnly("io.github.skylot:jadx-kotlin-source-debug-extension")
+    runtimeOnly("io.github.skylot:jadx-xapk-input")
+    runtimeOnly("io.github.skylot:jadx-aab-input")
+    runtimeOnly("io.github.skylot:jadx-apkm-input")
+    runtimeOnly("io.github.skylot:jadx-apks-input")
+
     // SLF4J backend — routes jadx log output to stderr (never stdout, which is JSON-RPC)
     implementation("org.slf4j:slf4j-simple:2.0.12")
 }
@@ -41,6 +57,7 @@ tasks.named<ShadowJar>("shadowJar") {
     archiveBaseName.set("rejadx-server")
     archiveClassifier.set("all")
     archiveVersion.set("")
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
     // Merge ServiceLoader descriptors so all JadxPlugin registrations survive bundling.
     // Without this, Shadow picks one arbitrarily and breaks jadx's plugin loading.
     mergeServiceFiles()

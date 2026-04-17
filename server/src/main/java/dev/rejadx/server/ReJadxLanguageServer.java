@@ -9,6 +9,7 @@ import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.InitializedParams;
 import org.eclipse.lsp4j.RenameOptions;
 import org.eclipse.lsp4j.ServerCapabilities;
+import org.eclipse.lsp4j.SetTraceParams;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageClientAware;
@@ -82,5 +83,12 @@ public class ReJadxLanguageServer implements LanguageServer, LanguageClientAware
     @Override
     public WorkspaceService getWorkspaceService() {
         return workspaceService;
+    }
+
+    @Override
+    public void setTrace(SetTraceParams params) {
+        // VS Code sends this notification during client lifecycle.
+        // LSP4J's LanguageServer default throws UnsupportedOperationException,
+        // so we explicitly accept it as a no-op for now.
     }
 }

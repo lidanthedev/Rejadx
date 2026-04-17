@@ -7,7 +7,7 @@
       "request": "launch",
       "args": ["--extensionDevelopmentPath=${workspaceFolder}/client"],
       "outFiles": ["${workspaceFolder}/client/dist/**/*.js"],
-      "preLaunchTask": "npm: compile - client"
+      "preLaunchTask": "build: server + client"
     }
   ]
 }

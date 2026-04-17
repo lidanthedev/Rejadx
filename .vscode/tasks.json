@@ -2,6 +2,16 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "type": "shell",
+      "command": "./gradlew shadowJar",
+      "options": {
+        "cwd": "${workspaceFolder}/server"
+      },
+      "label": "gradle: shadowJar - server",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
       "type": "npm",
       "script": "compile",
       "path": "client/",
@@ -9,6 +19,16 @@
       "group": "build",
       "problemMatcher": ["$ts-webpack-watch"],
       "isBackground": false
+    },
+    {
+      "label": "build: server + client",
+      "dependsOn": [
+        "gradle: shadowJar - server",
+        "npm: compile - client"
+      ],
+      "dependsOrder": "parallel",
+      "group": "build",
+      "problemMatcher": []
     }
   ]
 }

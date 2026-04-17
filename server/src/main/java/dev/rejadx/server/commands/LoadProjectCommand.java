@@ -4,6 +4,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import org.slf4j.Logger;
@@ -27,11 +28,14 @@ public class LoadProjectCommand {
             return CompletableFuture.failedFuture(new IllegalArgumentException("rejadx.loadProject requires a file path argument"));
         }
 
-        String pathStr = args.get(0).toString();
+        String pathStr = CommandArgs.requireString(args, 0, "rejadx.loadProject requires a file path argument");
         Path inputFile = Paths.get(pathStr);
 
         if (!Files.exists(inputFile)) {
-            return CompletableFuture.failedFuture(new IllegalArgumentException("File not found: " + pathStr));
+            log.warn("Load rejected, file not found: {}", pathStr);
+            return CompletableFuture.completedFuture(Map.of(
+                    "loaded", false,
+                    "error", "File not found: " + pathStr));
         }
 
         log.info("Loading project: {}", inputFile);

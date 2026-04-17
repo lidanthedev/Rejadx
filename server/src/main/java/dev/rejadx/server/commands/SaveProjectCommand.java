@@ -28,8 +28,9 @@ public class SaveProjectCommand {
                 Path currentInput = manager.getCurrentInputFile();
                 if (currentInput == null) throw new IllegalStateException("No project loaded");
 
-                Path stateFile = (args != null && !args.isEmpty() && args.get(0) != null)
-                        ? java.nio.file.Paths.get(args.get(0).toString())
+                String explicitPath = CommandArgs.optionalString(args, 0);
+                Path stateFile = (explicitPath != null)
+                        ? java.nio.file.Paths.get(explicitPath)
                         : ProjectStateStore.defaultStateFile(currentInput);
 
                 manager.saveProject(stateFile);
