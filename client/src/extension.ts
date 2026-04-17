@@ -20,7 +20,7 @@ class JadxContentProvider implements vscode.TextDocumentContentProvider {
   }
 
   provideTextDocumentContent(uri: vscode.Uri): string {
-    return this._cache.get(uri.toString()) ?? '// Loading\u2026';
+    return this._cache.get(uri.toString()) ?? '// Loading...';
   }
 }
 

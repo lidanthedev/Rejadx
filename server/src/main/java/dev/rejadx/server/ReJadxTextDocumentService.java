@@ -66,6 +66,7 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 source = engine.getSource(parsed.rawClassName(), parsed.sourceType());
             } catch (Exception e) {
                 log.warn("didOpen failed for {}: {}", uri, e.getMessage());
+                pushSource(uri, "// Failed to load source: " + e.getMessage(), "java");
                 return;
             } finally {
                 rl.unlock();

@@ -14,15 +14,24 @@ public final class JadxUriParser {
 
     /**
      * Parses both URI forms:
-     *   Canonical: jadx://classes/com/app/Main?type=java  (slashes → dots)
+     *   Canonical: jadx:///classes/com/app/Main?type=java (slashes → dots)
      *   Legacy:    jadx://class/com.app.Main              (already dots, no query)
+     * Also accepts authority-based variants emitted by older builds:
+     *   jadx://classes/com/app/Main?type=java
      */
     public static ParsedUri parse(String uriString) {
         URI uri = URI.create(uriString);
         String path = uri.getPath();  // leading slash included
+        String authority = uri.getAuthority();
 
         String rawClassName;
-        if (path.startsWith("/classes/")) {
+        if ("classes".equals(authority)) {
+            // Authority-based canonical form: jadx://classes/com/app/Main?type=java
+            rawClassName = trimLeadingSlash(path).replace('/', '.');
+        } else if ("class".equals(authority)) {
+            // Authority-based legacy form: jadx://class/com.app.Main
+            rawClassName = trimLeadingSlash(path);
+        } else if (path.startsWith("/classes/")) {
             // Canonical form — path uses slashes, inner classes use $
             rawClassName = path.substring("/classes/".length()).replace('/', '.');
         } else if (path.startsWith("/class/")) {
@@ -46,6 +55,13 @@ public final class JadxUriParser {
         // Replace dots with slashes for the path component; $ is kept as-is
         String path = rawClassName.replace('.', '/');
         String typeParam = (type == SourceType.SMALI) ? "smali" : "java";
-        return SCHEME + "://classes/" + path + "?type=" + typeParam;
+        return SCHEME + ":///classes/" + path + "?type=" + typeParam;
+    }
+
+    private static String trimLeadingSlash(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        return value.charAt(0) == '/' ? value.substring(1) : value;
     }
 }

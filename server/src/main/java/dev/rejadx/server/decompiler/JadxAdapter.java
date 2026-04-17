@@ -68,9 +68,7 @@ public class JadxAdapter implements IDecompilerEngine {
 
     @Override
     public List<PackageNode> getPackageTree() {
-        return jadx.getPackages().stream()
-                .map(PackageNode::fromJadxPackage)
-                .collect(Collectors.toList());
+        return PackageNode.fromJadxPackages(jadx.getPackages());
     }
 
     @Override
