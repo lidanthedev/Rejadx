@@ -46,8 +46,8 @@ public class ExportMappingsCommand {
                 // Classes first, then members. Keep output deterministic.
                 renames.sort(Comparator
                         .comparing((ICodeRename r) -> rank(r.getNodeRef()))
-                        .thenComparing(r -> safe(r.getNodeRef().getDeclaringClass()))
-                        .thenComparing(r -> safe(r.getNodeRef().getShortId()))
+                        .thenComparing(r -> safe(r.getNodeRef() == null ? null : r.getNodeRef().getDeclaringClass()))
+                        .thenComparing(r -> safe(r.getNodeRef() == null ? null : r.getNodeRef().getShortId()))
                         .thenComparing(ICodeRename::getNewName));
 
                 for (ICodeRename rename : renames) {

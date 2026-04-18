@@ -131,12 +131,18 @@ public class SafeExternalPluginsLoader implements JadxPluginLoader {
 
             URLClassLoader cl = new URLClassLoader(CL_PREFIX + pluginPath.getFileName(), urls,
                     SafeExternalPluginsLoader.class.getClassLoader());
-            classLoaders.add(cl);
             int prevSize = map.size();
             loadFromClassLoader(map, cl);
             int loaded = map.size() - prevSize;
             if (loaded == 0) {
                 log.warn("No plugins found in external path {}", pluginPath);
+                try {
+                    cl.close();
+                } catch (Exception ignored) {
+                    // ignore
+                }
+            } else {
+                classLoaders.add(cl);
             }
         } catch (Exception e) {
             log.warn("Skipping external plugin path {}: {}", pluginPath, e.getMessage());

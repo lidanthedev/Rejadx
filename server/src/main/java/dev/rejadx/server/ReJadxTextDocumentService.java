@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import javax.lang.model.SourceVersion;
+
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
@@ -198,7 +200,7 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 Range fullDocRange = new Range(new Position(0, 0), new Position(lastLine, lastChar));
 
                 // Apply rename (reloads affected classes internally)
-                String newSource = engine.applyRename(target.getNodeRef(), target.getCodeRef(), newName);
+                String newSource = engine.applyRename(target.nodeRef(), target.codeRef(), newName);
 
                 // Persist rename immediately to sidecar state file.
                 manager.saveCurrentProjectStateUnsafe();
@@ -259,18 +261,9 @@ public class ReJadxTextDocumentService implements TextDocumentService {
     }
 
     private static boolean isValidIdentifier(String name) {
-        if (name == null || name.isEmpty()) {
-            return false;
-        }
-        if (!Character.isJavaIdentifierStart(name.charAt(0))) {
-            return false;
-        }
-        for (int i = 1; i < name.length(); i++) {
-            if (!Character.isJavaIdentifierPart(name.charAt(i))) {
-                return false;
-            }
-        }
-        return true;
+        return name != null
+                && SourceVersion.isIdentifier(name)
+                && !SourceVersion.isKeyword(name);
     }
 
     private static String resourceLangId(String uri) {

@@ -15,8 +15,14 @@ public class ResetCodeCacheCommand {
     }
 
     public CompletableFuture<Object> execute(List<Object> args) {
-        return manager.resetCodeCache().exceptionally(e -> Map.of(
-                "reset", false,
-                "error", e.getMessage() == null ? "Cache reset failed" : e.getMessage()));
+        try {
+            return manager.resetCodeCache().exceptionally(e -> Map.of(
+                    "reset", false,
+                    "error", e.getMessage() == null ? "Cache reset failed" : e.getMessage()));
+        } catch (Exception e) {
+            return CompletableFuture.completedFuture(Map.of(
+                    "reset", false,
+                    "error", e.getMessage() == null ? "Cache reset failed" : e.getMessage()));
+        }
     }
 }

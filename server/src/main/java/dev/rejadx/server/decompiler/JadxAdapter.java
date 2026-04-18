@@ -584,9 +584,12 @@ public class JadxAdapter implements IDecompilerEngine {
             }
         }
 
-        // Fallback: attach to enclosing class declaration
-        JadxNodeRef clsRef = JadxNodeRef.forCls(cls);
-        return new JadxCodeComment(clsRef, text, style);
+        // Fallback: attach to class only when cursor is in class declaration/header area.
+        if (isInClassHeader(cls, codeInfo.getCodeStr(), pos)) {
+            JadxNodeRef clsRef = JadxNodeRef.forCls(cls);
+            return new JadxCodeComment(clsRef, text, style);
+        }
+        return null;
     }
 
     private static int lineCharToOffset(String source, int line, int character) {
@@ -611,6 +614,22 @@ public class JadxAdapter implements IDecompilerEngine {
         }
         String line = source.substring(Math.max(0, lineStartPos), end).trim();
         return line.startsWith("//") || (line.startsWith("/*") && line.endsWith("*/"));
+    }
+
+    private static boolean isInClassHeader(JavaClass cls, String source, int pos) {
+        if (source == null || source.isEmpty()) {
+            return false;
+        }
+        int defPos = cls.getDefPos();
+        if (defPos < 0 || defPos >= source.length()) {
+            return false;
+        }
+        int headerEnd = source.indexOf('{', defPos);
+        if (headerEnd < 0) {
+            return false;
+        }
+        int p = Math.max(0, Math.min(pos, source.length() - 1));
+        return p >= defPos && p <= headerEnd;
     }
 
     private static int[] charOffsetToLineChar(String source, int offset) {
@@ -680,9 +699,12 @@ public class JadxAdapter implements IDecompilerEngine {
         ICodeInfo codeInfo = cls.getCodeInfo();
         String source = codeInfo.getCodeStr();
         String className = cls.getName();
-        int idx = source.indexOf(className);
+        int idx = cls.getDefPos();
+        if (idx < 0 || idx >= source.length()) {
+            idx = source.indexOf(className);
+        }
         if (idx < 0) {
-            idx = Math.max(0, cls.getDefPos());
+            idx = 0;
         }
         int[] lc = charOffsetToLineChar(source, idx);
         return new XrefLocation(

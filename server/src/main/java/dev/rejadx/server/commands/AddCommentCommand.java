@@ -37,6 +37,9 @@ public class AddCommentCommand {
 
         return CompletableFuture.supplyAsync(() -> {
             JadxUriParser.ParsedUri parsed = JadxUriParser.parse(p.uri);
+            if (parsed.sourceType() != dev.rejadx.server.model.SourceType.JAVA) {
+                throw new IllegalArgumentException("Comments can only be added to Java sources");
+            }
 
             ReentrantReadWriteLock.WriteLock wl = manager.getLock().writeLock();
             wl.lock();

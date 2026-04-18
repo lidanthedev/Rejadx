@@ -147,6 +147,9 @@ public class DecompilerManager {
      * Caller must hold the manager lock (read or write).
      */
     public void saveCurrentProjectStateUnsafe() throws Exception {
+        if (lock.getReadHoldCount() + lock.getWriteHoldCount() == 0) {
+            throw new IllegalStateException("saveCurrentProjectStateUnsafe requires manager lock");
+        }
         if (engine == null) throw new IllegalStateException("No project loaded");
         if (currentInputFile == null) throw new IllegalStateException("No input file loaded");
         Path stateFile = ProjectStateStore.defaultStateFile(currentInputFile);
@@ -176,7 +179,6 @@ public class DecompilerManager {
     public CompletableFuture<Object> resetCodeCache() {
         final Path inputFile;
         final Path cacheDir;
-        final IDecompilerEngine oldEngine;
 
         lock.writeLock().lock();
         try {
@@ -194,23 +196,17 @@ public class DecompilerManager {
 
             inputFile = currentInputFile;
             cacheDir = currentCacheDir;
-            oldEngine = engine;
-
-            engine = null;
-            currentInputFile = null;
-            currentCacheDir = null;
-            setStatus("idle");
         } finally {
             lock.writeLock().unlock();
         }
 
-        return CompletableFuture.runAsync(() -> {
+        return CompletableFuture.supplyAsync(() -> {
             try {
-                oldEngine.close();
+                clearDirectory(cacheDir);
             } catch (Exception e) {
-                log.warn("Failed to close engine during cache reset: {}", e.getMessage());
+                log.warn("Failed to clear cache directory {}: {}", cacheDir, e.getMessage());
             }
-            clearDirectory(cacheDir);
+            return true;
         }, workPool).thenCompose(ignored -> loadProject(inputFile)).thenApply(loadResult -> {
             Map<String, Object> out = new HashMap<>();
             out.put("reset", true);

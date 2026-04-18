@@ -2,7 +2,7 @@ package dev.rejadx.server.model;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -130,8 +130,7 @@ public class PackageNode {
         private final String fullName;
         private final boolean isPackage;
         private final String uri;
-        private final Map<String, MutableNode> byName = new HashMap<>();
-        private final List<MutableNode> ordered = new ArrayList<>();
+        private final Map<String, MutableNode> byName = new LinkedHashMap<>();
 
         private MutableNode(String name, String fullName, boolean isPackage, String uri) {
             this.name = name;
@@ -147,12 +146,11 @@ public class PackageNode {
             }
             MutableNode created = new MutableNode(name, fullName, isPackage, uri);
             byName.put(name, created);
-            ordered.add(created);
             return created;
         }
 
         private PackageNode toImmutable() {
-            List<PackageNode> children = ordered.stream()
+            List<PackageNode> children = byName.values().stream()
                     .map(MutableNode::toImmutable)
                     .collect(Collectors.toCollection(ArrayList::new));
             sortChildren(children);

@@ -1,6 +1,9 @@
 package dev.rejadx.server.uri;
 
 import java.net.URI;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import dev.rejadx.server.model.SourceType;
 
@@ -39,7 +42,7 @@ public final class JadxUriParser {
             rawClassName = path.substring("/class/".length());
         } else if (path.startsWith("/resources/")) {
             // Resource virtual documents; payload is resource path, not class name.
-            rawClassName = path.substring("/resources/".length());
+            rawClassName = URLDecoder.decode(path.substring("/resources/".length()), StandardCharsets.UTF_8);
             return new ParsedUri(rawClassName, SourceType.RESOURCE);
         } else {
             throw new IllegalArgumentException("Unrecognized jadx URI path: " + uriString);
@@ -63,7 +66,7 @@ public final class JadxUriParser {
     }
 
     public static String buildResource(String resourcePath) {
-        return SCHEME + ":///resources/" + resourcePath;
+        return SCHEME + ":///resources/" + URLEncoder.encode(resourcePath, StandardCharsets.UTF_8);
     }
 
     private static String trimLeadingSlash(String value) {

@@ -7,7 +7,12 @@ import { ClassTreeProvider, PackageNode } from './views/ClassTreeProvider';
 interface SourceReadyParams {
   uri: string;
   content: string;
-  languageId: string;
+  languageId?: string;
+}
+
+interface InflightRequest {
+  token: symbol;
+  promise: Thenable<string>;
 }
 
 interface LspWorkspaceEdit {
@@ -88,7 +93,7 @@ async function ensureJadxDocumentLanguage(doc: vscode.TextDocument): Promise<voi
 
 class JadxContentProvider implements vscode.TextDocumentContentProvider {
   private readonly _cache = new Map<string, string>();
-  private readonly _inflight = new Map<string, Thenable<string>>();
+  private readonly _inflight = new Map<string, InflightRequest>();
   readonly onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
   readonly onDidChange = this.onDidChangeEmitter.event;
 
@@ -119,9 +124,10 @@ class JadxContentProvider implements vscode.TextDocumentContentProvider {
 
     const pending = this._inflight.get(key);
     if (pending) {
-      return pending;
+      return pending.promise;
     }
 
+    const token = Symbol(key);
     const request = lc.sendRequest('workspace/executeCommand', {
       command: 'rejadx.getSource',
       arguments: [key]
@@ -129,17 +135,23 @@ class JadxContentProvider implements vscode.TextDocumentContentProvider {
       const content = typeof res === 'string'
         ? res
         : (res as { content?: string } | undefined)?.content ?? '// Empty source';
-      this.update(key, content);
+      if (this._inflight.get(key)?.token === token) {
+        this.update(key, content);
+      }
       return content;
     }).catch((err) => {
       const message = `// Failed to load source: ${err instanceof Error ? err.message : String(err)}`;
-      this.update(key, message);
+      if (this._inflight.get(key)?.token === token) {
+        this.update(key, message);
+      }
       return message;
     }).finally(() => {
-      this._inflight.delete(key);
+      if (this._inflight.get(key)?.token === token) {
+        this._inflight.delete(key);
+      }
     });
 
-    this._inflight.set(key, request);
+    this._inflight.set(key, { token, promise: request });
     return request;
   }
 }
@@ -298,6 +310,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     dashboardProvider.setRecentProjects(projects);
   };
 
+  const invalidateOpenJavaVirtualDocs = (): void => {
+    const uris = new Set<string>();
+    for (const doc of vscode.workspace.textDocuments) {
+      if (doc.uri.scheme !== 'jadx') {
+        continue;
+      }
+      if (languageIdForJadxUri(doc.uri) !== 'java') {
+        continue;
+      }
+      uris.add(doc.uri.toString());
+    }
+    for (const uri of uris) {
+      contentProvider.invalidate(uri);
+    }
+  };
+
   const pushRecentProject = async (apkPath: string): Promise<void> => {
     const current = getRecentProjects().filter(p => p !== apkPath);
     current.unshift(apkPath);
@@ -337,7 +365,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const uri = vscode.Uri.parse(params.uri);
         const openDoc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
         if (openDoc) {
-          const desired = params.languageId === 'smali' ? 'smali' : 'java';
+          const desired = params.languageId && params.languageId.length > 0
+            ? params.languageId
+            : 'java';
           if (openDoc.languageId !== desired) {
             void vscode.languages.setTextDocumentLanguage(openDoc, desired).then(() => undefined, () => undefined);
           }
@@ -615,8 +645,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         return;
       }
 
-      // Force a full document refresh from the server to avoid stale line/range artifacts.
-      contentProvider.invalidate(uriKey);
+      // Force full refresh of all open Java virtual docs to avoid stale cross-file symbols.
+      invalidateOpenJavaVirtualDocs();
     } catch (err) {
       vscode.window.showErrorMessage(`ReJadx: rename failed: ${err}`);
     }

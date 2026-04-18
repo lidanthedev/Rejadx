@@ -17,10 +17,16 @@ public class SetSettingsCommand {
         this.manager = manager;
     }
 
+    /**
+     * Apply server settings; changes take effect on next JadxAdapter.load() call.
+     */
     public CompletableFuture<Object> execute(List<Object> args) {
-        Params p = (args != null && !args.isEmpty())
+        Params p = (args != null && !args.isEmpty() && args.get(0) != null)
                 ? GSON.fromJson(GSON.toJson(args.get(0)), Params.class)
                 : new Params();
+        if (p == null) {
+            p = new Params();
+        }
 
         manager.getSettings().setCustomArgs(p.customArgs);
         manager.getSettings().setEnableExternalPlugins(p.enableExternalPlugins);

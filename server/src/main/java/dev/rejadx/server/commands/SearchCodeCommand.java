@@ -28,6 +28,9 @@ public class SearchCodeCommand {
         }
 
         Params p = GSON.fromJson(GSON.toJson(args.get(0)), Params.class);
+        if (p == null) {
+            return CompletableFuture.completedFuture(List.of());
+        }
         if (p.query == null || p.query.isEmpty()) {
             return CompletableFuture.completedFuture(List.of());
         }

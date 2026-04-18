@@ -224,6 +224,10 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .recent-placeholder {
+      font-size: 0.85em;
+      color: var(--vscode-descriptionForeground);
+    }
   </style>
 </head>
 <body>
@@ -326,10 +330,14 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
         const recent = Array.isArray(msg.recentProjects) ? msg.recentProjects : [];
         const recentList = document.getElementById('recent-list');
+        const initStatusEl = document.getElementById('init-status');
         recentList.innerHTML = '';
         if (recent.length === 0) {
+          if (initStatusEl) {
+            initStatusEl.textContent = msg.initStatus || 'No recent projects.';
+          }
           const empty = document.createElement('div');
-          empty.id = 'init-status';
+          empty.className = 'recent-placeholder';
           empty.textContent = 'No recent projects.';
           recentList.appendChild(empty);
         } else {

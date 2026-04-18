@@ -26,8 +26,12 @@ public class GetCommentCommand {
             return CompletableFuture.failedFuture(new IllegalArgumentException("rejadx.getComment requires a params argument"));
         }
 
-        Params p = GSON.fromJson(GSON.toJson(args.get(0)), Params.class);
         return CompletableFuture.supplyAsync(() -> {
+            Params p = GSON.fromJson(GSON.toJson(args.get(0)), Params.class);
+            if (p == null || p.uri == null || p.uri.isBlank()) {
+                throw new IllegalArgumentException("rejadx.getComment requires valid params");
+            }
+
             ReentrantReadWriteLock.ReadLock rl = manager.getLock().readLock();
             rl.lock();
             try {
@@ -41,6 +45,8 @@ public class GetCommentCommand {
                         "exists", info.isExists(),
                         "comment", info.getComment(),
                         "style", info.getStyle());
+            } catch (IllegalStateException e) {
+                throw e;
             } catch (Exception e) {
                 throw new RuntimeException("getComment failed: " + e.getMessage(), e);
             } finally {
