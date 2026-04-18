@@ -563,6 +563,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   }));
 
+  context.subscriptions.push(vscode.commands.registerCommand('rejadx.openVirtualFile', async (uriOrString: vscode.Uri | string) => {
+    const uri = typeof uriOrString === 'string' ? vscode.Uri.parse(uriOrString) : uriOrString;
+    if (!uri || uri.scheme !== 'jadx') {
+      return;
+    }
+
+    // Bypass cached content when opening from tree.
+    contentProvider.invalidate(uri.toString());
+    await vscode.commands.executeCommand('vscode.open', uri, { preview: false });
+  }));
+
   context.subscriptions.push(vscode.commands.registerCommand('jadx.openSideBySide', async () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.uri.scheme !== 'jadx') {

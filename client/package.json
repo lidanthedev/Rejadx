@@ -84,6 +84,10 @@
       {
         "command": "jadx.searchCode",
         "title": "ReJadx: Search in Decompiled Code"
+      },
+      {
+        "command": "rejadx.openVirtualFile",
+        "title": "ReJadx: Open Virtual File"
       }
     ],
     "keybindings": [

@@ -25,9 +25,9 @@ class ClassTreeItem extends vscode.TreeItem {
     }
     if (!node.isPackage && node.uri) {
       this.command = {
-        command: 'vscode.open',
+        command: 'rejadx.openVirtualFile',
         title: 'Open File',
-        arguments: [vscode.Uri.parse(node.uri), { preview: false }],
+        arguments: [node.uri],
       };
       this.resourceUri = vscode.Uri.parse(node.uri);
     }
