@@ -8,10 +8,16 @@
     "url": "https://github.com/lidanthedev/Rejadx.git"
   },
   "icon": "media/icon.png",
-  "version": "0.0.1",
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
@@ -49,11 +55,15 @@
     "languages": [
       {
         "id": "java",
-        "extensions": [".java"]
+        "extensions": [
+          ".java"
+        ]
       },
       {
         "id": "smali",
-        "extensions": [".smali"]
+        "extensions": [
+          ".smali"
+        ]
       }
     ],
     "grammars": [
