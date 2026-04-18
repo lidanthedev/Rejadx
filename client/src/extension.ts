@@ -209,19 +209,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     const pos = editor.selection.active;
     try {
-      await client.sendRequest('jadx/addComment', {
+      const res = await client.sendRequest('jadx/addComment', {
         uri: uri.toString(),
         line: pos.line,
         character: pos.character,
         comment: comment.trim(),
         style: 'LINE'
-      });
+      }) as { content?: string };
 
-      // Force VS Code to re-fetch this virtual document.
-      contentProvider.invalidate(uri.toString());
+      if (typeof res?.content === 'string' && res.content.length > 0) {
+        contentProvider.update(uri.toString(), res.content);
+      } else {
+        contentProvider.invalidate(uri.toString());
+      }
+
+      vscode.window.showInformationMessage('ReJadx: Comment added.');
     } catch (err) {
       vscode.window.showErrorMessage(`ReJadx: add comment failed: ${err}`);
     }
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('rejadx.renameAtCursor', async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.uri.scheme !== 'jadx') {
+      return;
+    }
+    await vscode.commands.executeCommand('editor.action.rename');
   }));
 }
 

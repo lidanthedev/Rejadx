@@ -40,12 +40,21 @@
       {
         "command": "jadx.addComment",
         "title": "ReJadx: Add Comment"
+      },
+      {
+        "command": "rejadx.renameAtCursor",
+        "title": "ReJadx: Rename Symbol"
       }
     ],
     "keybindings": [
       {
         "command": "jadx.addComment",
         "key": "ctrl+shift+c",
+        "when": "editorTextFocus && resourceScheme == 'jadx'"
+      },
+      {
+        "command": "rejadx.renameAtCursor",
+        "key": "f2",
         "when": "editorTextFocus && resourceScheme == 'jadx'"
       }
     ]

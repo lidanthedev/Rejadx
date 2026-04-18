@@ -4,7 +4,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -95,7 +97,7 @@ public class JadxAdapter implements IDecompilerEngine {
     // --- Xrefs ---
 
     @Override
-    public List<XrefLocation> getReferences(String rawClassName, int charOffset) throws ClassNotFoundException {
+    public List<XrefLocation> getReferences(String rawClassName, int charOffset, boolean includeDeclaration) throws ClassNotFoundException {
         JavaClass cls = findClass(rawClassName);
         ICodeInfo codeInfo = cls.getCodeInfo();
         JavaNode target = resolveBestNodeAt(codeInfo, charOffset);
@@ -104,23 +106,34 @@ public class JadxAdapter implements IDecompilerEngine {
         }
 
         List<XrefLocation> results = new ArrayList<>();
-        for (JavaNode usage : target.getUseIn()) {
-            if (results.size() >= XREF_LIMIT) break;
-            JavaClass userCls = topClass(usage);
-            if (userCls == null) continue;
+        Set<String> seen = new HashSet<>();
+        List<JavaNode> searchNodes = buildUsageSearchNodes(target);
 
-            try {
-                ICodeInfo userCodeInfo = userCls.getCodeInfo();
-                String userSource = userCodeInfo.getCodeStr();
-                List<Integer> positions = userCls.getUsePlacesFor(userCodeInfo, target);
-                String uri = JadxUriParser.build(userCls.getRawName(), SourceType.JAVA);
-                for (int pos : positions) {
-                    if (results.size() >= XREF_LIMIT) break;
-                    int[] lc = charOffsetToLineChar(userSource, pos);
-                    results.add(new XrefLocation(uri, lc[0], lc[1]));
+        if (includeDeclaration) {
+            for (JavaNode searchNode : searchNodes) {
+                addDeclarationLocation(searchNode, results, seen);
+            }
+        }
+
+        for (JavaNode searchNode : searchNodes) {
+            for (JavaNode usage : searchNode.getUseIn()) {
+                if (results.size() >= XREF_LIMIT) break;
+                JavaClass userCls = topClass(usage);
+                if (userCls == null) continue;
+
+                try {
+                    ICodeInfo userCodeInfo = userCls.getCodeInfo();
+                    String userSource = userCodeInfo.getCodeStr();
+                    List<Integer> positions = userCls.getUsePlacesFor(userCodeInfo, searchNode);
+                    String uri = JadxUriParser.build(userCls.getRawName(), SourceType.JAVA);
+                    for (int pos : positions) {
+                        if (results.size() >= XREF_LIMIT) break;
+                        int[] lc = charOffsetToLineChar(userSource, pos);
+                        addXref(results, seen, uri, lc[0], lc[1]);
+                    }
+                } catch (Exception e) {
+                    log.warn("Skipping xref scan for class {}: {}", userCls.getFullName(), e.getMessage());
                 }
-            } catch (Exception e) {
-                log.warn("Skipping xref scan for class {}: {}", userCls.getFullName(), e.getMessage());
             }
         }
         return results;
@@ -154,6 +167,7 @@ public class JadxAdapter implements IDecompilerEngine {
         renames.add(new JadxCodeRename(nodeRef, newName));
         liveCodeData.setRenames(renames);
         jadx.getArgs().setCodeData(liveCodeData);
+        jadx.reloadCodeData();
 
         JavaClass affected = findAffectedClass(nodeRef);
         if (affected == null) throw new ClassNotFoundException("Could not resolve class for nodeRef");
@@ -184,6 +198,7 @@ public class JadxAdapter implements IDecompilerEngine {
         comments.add(comment);
         liveCodeData.setComments(comments);
         jadx.getArgs().setCodeData(liveCodeData);
+        jadx.reloadCodeData();
 
         JavaClass affected = findAffectedClass(comment.getNodeRef());
         if (affected == null) throw new ClassNotFoundException("Could not resolve class for comment nodeRef");
@@ -354,5 +369,54 @@ public class JadxAdapter implements IDecompilerEngine {
             }
         }
         return new int[]{line, offset - lineStart};
+    }
+
+    private void addDeclarationLocation(JavaNode target, List<XrefLocation> results, Set<String> seen) {
+        try {
+            JavaClass declTop = topClass(target);
+            if (declTop == null) {
+                return;
+            }
+            ICodeInfo declCode = declTop.getCodeInfo();
+            int defPos = target.getDefPos();
+            if (defPos < 0) {
+                return;
+            }
+            int[] lc = charOffsetToLineChar(declCode.getCodeStr(), defPos);
+            String uri = JadxUriParser.build(declTop.getRawName(), SourceType.JAVA);
+            addXref(results, seen, uri, lc[0], lc[1]);
+        } catch (Exception e) {
+            log.debug("Skipping declaration location for {}: {}", target, e.getMessage());
+        }
+    }
+
+    private static void addXref(List<XrefLocation> results, Set<String> seen, String uri, int line, int character) {
+        String key = uri + "#" + line + ":" + character;
+        if (seen.add(key)) {
+            results.add(new XrefLocation(uri, line, character));
+        }
+    }
+
+    private static List<JavaNode> buildUsageSearchNodes(JavaNode target) {
+        List<JavaNode> result = new ArrayList<>();
+        result.add(target);
+
+        if (target instanceof JavaMethod method) {
+            List<JavaMethod> related = method.getOverrideRelatedMethods();
+            if (!related.isEmpty()) {
+                result.clear();
+                result.addAll(related);
+            }
+            return result;
+        }
+
+        if (target instanceof JavaClass cls) {
+            for (JavaMethod method : cls.getMethods()) {
+                if (method.isConstructor()) {
+                    result.add(method);
+                }
+            }
+        }
+        return result;
     }
 }

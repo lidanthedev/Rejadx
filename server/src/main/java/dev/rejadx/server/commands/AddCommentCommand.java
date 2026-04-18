@@ -56,7 +56,7 @@ public class AddCommentCommand {
                             new dev.rejadx.server.model.SourceReadyParams(p.uri, newSource, "java"));
                 }
 
-                return (Object) Map.of("applied", true);
+                return (Object) Map.of("applied", true, "content", newSource);
             } catch (Exception e) {
                 throw new RuntimeException("addComment failed: " + e.getMessage(), e);
             } finally {

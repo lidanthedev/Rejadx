@@ -95,7 +95,8 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 String source = engine.getSource(parsed.rawClassName(), SourceType.JAVA);
                 int charOffset = lineCharToOffset(source, pos.getLine(), pos.getCharacter());
 
-                List<XrefLocation> xrefs = engine.getReferences(parsed.rawClassName(), charOffset);
+                boolean includeDecl = params.getContext() != null && params.getContext().isIncludeDeclaration();
+                List<XrefLocation> xrefs = engine.getReferences(parsed.rawClassName(), charOffset, includeDecl);
 
                 List<Location> locations = new ArrayList<>();
                 for (XrefLocation xref : xrefs) {
