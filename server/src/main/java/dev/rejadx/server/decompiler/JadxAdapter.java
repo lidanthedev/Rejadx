@@ -31,6 +31,7 @@ import jadx.api.data.impl.JadxCodeComment;
 import jadx.api.data.impl.JadxCodeData;
 import jadx.api.data.impl.JadxCodeRename;
 import jadx.api.data.impl.JadxNodeRef;
+import jadx.api.args.IntegerFormat;
 import jadx.api.metadata.ICodeAnnotation;
 import jadx.api.metadata.ICodeMetadata;
 import jadx.api.metadata.ICodeNodeRef;
@@ -38,6 +39,8 @@ import jadx.api.metadata.annotations.InsnCodeOffset;
 import jadx.api.metadata.annotations.NodeDeclareRef;
 import jadx.api.metadata.annotations.VarNode;
 import jadx.api.metadata.annotations.VarRef;
+import jadx.api.CommentsLevel;
+import jadx.api.DecompilationMode;
 
 import dev.rejadx.server.model.PackageNode;
 import dev.rejadx.server.model.CommentInfo;
@@ -54,6 +57,11 @@ public class JadxAdapter implements IDecompilerEngine {
 
     private JadxDecompiler jadx;
     private JadxCodeData liveCodeData;
+    private String customArgs = "";
+
+    public void setCustomArgs(String customArgs) {
+        this.customArgs = customArgs == null ? "" : customArgs;
+    }
 
     @Override
     public void load(Path inputFile, Path cacheDir, JadxCodeData existingData) throws Exception {
@@ -68,6 +76,8 @@ public class JadxAdapter implements IDecompilerEngine {
         args.setOutDirRes(cacheDir.resolve("res").toFile());
         args.setCodeData(liveCodeData);
 
+        applyCustomArgs(args);
+
         jadx = new JadxDecompiler(args);
         jadx.load();
 
@@ -78,6 +88,76 @@ public class JadxAdapter implements IDecompilerEngine {
         jadx.saveSources();
 
         log.info("Eager decompilation complete");
+    }
+
+    private void applyCustomArgs(JadxArgs args) {
+        String raw = customArgs.trim();
+        if (raw.isEmpty()) {
+            return;
+        }
+
+        String[] parts = raw.split("\\s+");
+        for (String p : parts) {
+            if (p.isEmpty()) {
+                continue;
+            }
+            if ("--show-inconsistent-code".equals(p)) {
+                args.setShowInconsistentCode(true);
+            } else if ("--no-debug-info".equals(p)) {
+                args.setDebugInfo(false);
+            } else if ("--escape-unicode".equals(p)) {
+                args.setEscapeUnicode(true);
+            } else if (p.startsWith("--threads-count=")) {
+                parseInt(p).ifPresent(args::setThreadsCount);
+            } else if (p.startsWith("--decompilation-mode=")) {
+                String v = valueOf(p);
+                if (v != null) {
+                    try {
+                        args.setDecompilationMode(DecompilationMode.valueOf(v.toUpperCase()));
+                    } catch (Exception ignored) {
+                        // Ignore unsupported values.
+                    }
+                }
+            } else if (p.startsWith("--comments-level=")) {
+                String v = valueOf(p);
+                if (v != null) {
+                    try {
+                        args.setCommentsLevel(CommentsLevel.valueOf(v.toUpperCase()));
+                    } catch (Exception ignored) {
+                        // Ignore unsupported values.
+                    }
+                }
+            } else if (p.startsWith("--integer-format=")) {
+                String v = valueOf(p);
+                if (v != null) {
+                    try {
+                        args.setIntegerFormat(IntegerFormat.valueOf(v.toUpperCase()));
+                    } catch (Exception ignored) {
+                        // Ignore unsupported values.
+                    }
+                }
+            }
+        }
+    }
+
+    private static java.util.OptionalInt parseInt(String arg) {
+        String v = valueOf(arg);
+        if (v == null) {
+            return java.util.OptionalInt.empty();
+        }
+        try {
+            return java.util.OptionalInt.of(Integer.parseInt(v));
+        } catch (Exception e) {
+            return java.util.OptionalInt.empty();
+        }
+    }
+
+    private static String valueOf(String arg) {
+        int idx = arg.indexOf('=');
+        if (idx < 0 || idx + 1 >= arg.length()) {
+            return null;
+        }
+        return arg.substring(idx + 1);
     }
 
     // --- Navigation ---

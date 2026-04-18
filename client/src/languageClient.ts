@@ -42,6 +42,18 @@ export async function startLanguageClient(context: vscode.ExtensionContext): Pro
   await client.start();
 }
 
+export interface ReJadxClientSettings {
+  searchMaxResults: number;
+  customJadxArgs: string;
+}
+
+export function getReJadxSettings(): ReJadxClientSettings {
+  const cfg = vscode.workspace.getConfiguration('rejadx');
+  const searchMaxResults = cfg.get<number>('search.maxResults', 50);
+  const customJadxArgs = cfg.get<string>('customJadxArgs', '');
+  return { searchMaxResults, customJadxArgs };
+}
+
 export async function stopLanguageClient(): Promise<void> {
   if (client) {
     await client.stop();

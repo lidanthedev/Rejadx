@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
-import { startLanguageClient, stopLanguageClient, getClient } from './languageClient';
+import { startLanguageClient, stopLanguageClient, getClient, getReJadxSettings } from './languageClient';
 import { DashboardProvider, TelemetryUpdate } from './views/DashboardProvider';
 import { ClassTreeProvider, PackageNode } from './views/ClassTreeProvider';
 
@@ -23,6 +23,10 @@ interface SearchResult {
   line: number;
   character: number;
   length: number;
+}
+
+interface ServerSettingsResult {
+  applied: boolean;
 }
 
 interface CommentLookupResult {
@@ -295,6 +299,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     try {
       const lc = await ensureClientStarted();
+      const settings = getReJadxSettings();
+      await lc.sendRequest('workspace/executeCommand', {
+        command: 'rejadx.setSettings',
+        arguments: [{ customArgs: settings.customJadxArgs ?? '' }]
+      }) as ServerSettingsResult;
+
       const result = await lc.sendRequest('workspace/executeCommand', {
         command: 'rejadx.loadProject',
         arguments: [apkPath]
@@ -334,6 +344,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
       if (lastLoadedApkPath) {
         dashboardProvider.notifyProjectLoading(lastLoadedApkPath);
+
+        const settings = getReJadxSettings();
+        await lc.sendRequest('workspace/executeCommand', {
+          command: 'rejadx.setSettings',
+          arguments: [{ customArgs: settings.customJadxArgs ?? '' }]
+        }) as ServerSettingsResult;
 
         const result = await lc.sendRequest('workspace/executeCommand', {
           command: 'rejadx.loadProject',
@@ -581,7 +597,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       return;
     }
 
-    const maxResults = 50;
+    const cfgMax = getReJadxSettings().searchMaxResults;
+    const maxResults = Number.isFinite(cfgMax) && cfgMax > 0 ? Math.floor(cfgMax) : 50;
     await vscode.window.withProgress({
       location: vscode.ProgressLocation.Notification,
       title: `ReJadx search: "${query}"`,
@@ -608,13 +625,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           vscode.Uri.parse(h.uri),
           new vscode.Range(h.line, h.character, h.line, h.character + Math.max(1, h.length))
         ));
-
-        await vscode.commands.executeCommand(
-          'editor.action.showReferences',
-          locations[0].uri,
-          locations[0].range.start,
-          locations
-        );
+        // It will go to the first result, but also show the peek view with all results to choose from.
+        for (let i = 0; i < 2; i++) {
+            await vscode.commands.executeCommand(
+            'editor.action.showReferences',
+            locations[0].uri,
+            locations[0].range.start,
+            locations
+            );
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
 
         if (hits.length >= maxResults) {
           vscode.window.showInformationMessage(`ReJadx: showing first ${maxResults} matches for "${query}".`);

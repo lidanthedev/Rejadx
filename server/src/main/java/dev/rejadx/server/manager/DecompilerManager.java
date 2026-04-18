@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import jadx.api.data.impl.JadxCodeData;
 
 import dev.rejadx.server.client.ReJadxClient;
+import dev.rejadx.server.config.ServerSettings;
 import dev.rejadx.server.decompiler.IDecompilerEngine;
 import dev.rejadx.server.decompiler.JadxAdapter;
 import dev.rejadx.server.model.TelemetryParams;
@@ -44,6 +45,7 @@ public class DecompilerManager {
 
     private volatile IDecompilerEngine engine;
     private volatile ReJadxClient client;
+    private final ServerSettings settings = new ServerSettings();
     private volatile Path currentInputFile;
     private volatile Path currentCacheDir;
     private volatile String status = "idle";
@@ -63,6 +65,10 @@ public class DecompilerManager {
 
     public Path getCurrentInputFile() {
         return currentInputFile;
+    }
+
+    public ServerSettings getSettings() {
+        return settings;
     }
 
     public void connect(ReJadxClient client) {
@@ -93,6 +99,7 @@ public class DecompilerManager {
             // Phase 1: build new engine outside any lock (this is the slow path)
             setStatus("loading");
             JadxAdapter newEngine = new JadxAdapter();
+            newEngine.setCustomArgs(settings.getCustomArgs());
             try {
                 setStatus("decompiling");
                 newEngine.load(inputFile, cacheDir, existingData);
