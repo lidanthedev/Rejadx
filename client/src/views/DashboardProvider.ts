@@ -18,6 +18,18 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
   private _view: vscode.WebviewView | undefined;
   private _onOpenApkFn: ((path: string) => Promise<void>) | undefined;
   private _onBrowseFn: (() => Promise<void>) | undefined;
+  private _state: {
+    phase: 'init' | 'loading' | 'loaded';
+    apkPath: string;
+    initStatus: string;
+    classCount: number;
+    telemetry?: TelemetryUpdate;
+  } = {
+    phase: 'init',
+    apkPath: '',
+    initStatus: 'No project loaded.',
+    classCount: 0
+  };
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
 
@@ -32,6 +44,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [vscode.Uri.joinPath(this._extensionUri, 'media')]
     };
     webviewView.webview.html = this._buildHtml(webviewView.webview);
+
+    this._pushState();
 
     webviewView.webview.onDidReceiveMessage(async (msg: { command: string; apkPath?: string }) => {
       if (msg.command === 'openApk' && msg.apkPath) {
@@ -48,19 +62,39 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
   setBrowseHandler(fn: () => Promise<void>): void { this._onBrowseFn = fn; }
 
   setApkPath(path: string): void {
-    this._view?.webview.postMessage({ command: 'setApkPath', path });
+    this._state.apkPath = path;
+    this._pushState();
+  }
+
+  notifyProjectLoading(path: string): void {
+    this._state.phase = 'loading';
+    this._state.apkPath = path;
+    this._state.initStatus = 'Loading...';
+    this._pushState();
   }
 
   notifyProjectLoaded(classCount: number): void {
-    this._view?.webview.postMessage({ command: 'projectLoaded', classCount });
+    this._state.phase = 'loaded';
+    this._state.classCount = classCount;
+    this._state.initStatus = 'Loaded';
+    this._pushState();
   }
 
   notifyProjectLoadFailed(message: string): void {
-    this._view?.webview.postMessage({ command: 'projectLoadFailed', message });
+    this._state.phase = this._state.classCount > 0 ? 'loaded' : 'init';
+    this._state.initStatus = message;
+    this._pushState();
   }
 
   updateTelemetry(params: TelemetryUpdate): void {
-    this._view?.webview.postMessage({ command: 'telemetry', ...params });
+    this._state.telemetry = params;
+    if (params.classCount > 0) {
+      this._state.classCount = params.classCount;
+      if (this._state.phase !== 'loading') {
+        this._state.phase = 'loaded';
+      }
+    }
+    this._pushState();
   }
 
   private _buildHtml(webview: vscode.Webview): string {
@@ -172,7 +206,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       const p = document.getElementById('apk-path').value.trim();
       if (p) {
         vscode.postMessage({ command: 'openApk', apkPath: p });
-        document.getElementById('init-status').textContent = 'Loading…';
+        document.getElementById('init-status').textContent = 'Loading...';
         document.getElementById('open-btn').disabled = true;
       }
     });
@@ -183,15 +217,39 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
     window.addEventListener('message', e => {
       const msg = e.data;
-      if (msg.command === 'setApkPath') {
-        document.getElementById('apk-path').value = msg.path;
-      } else if (msg.command === 'projectLoaded') {
-        document.getElementById('init').style.display = 'none';
-        document.getElementById('dash').style.display = 'block';
-        document.getElementById('class-count').textContent = msg.classCount;
-      } else if (msg.command === 'projectLoadFailed') {
-        document.getElementById('init-status').textContent = msg.message;
-        document.getElementById('open-btn').disabled = false;
+      if (msg.command === 'state') {
+        document.getElementById('apk-path').value = msg.apkPath || '';
+
+        const init = document.getElementById('init');
+        const dash = document.getElementById('dash');
+        const initStatus = document.getElementById('init-status');
+        const openBtn = document.getElementById('open-btn');
+
+        const showDashboard = msg.phase === 'loading' || msg.phase === 'loaded';
+        init.style.display = showDashboard ? 'none' : 'block';
+        dash.style.display = showDashboard ? 'block' : 'none';
+
+        initStatus.textContent = msg.initStatus || 'No project loaded.';
+        openBtn.disabled = msg.phase === 'loading';
+
+        if (typeof msg.classCount === 'number') {
+          document.getElementById('class-count').textContent = String(msg.classCount);
+        }
+
+        if (msg.telemetry) {
+          const t = msg.telemetry;
+          const pct = t.heapMaxBytes > 0 ? (t.heapUsedBytes / t.heapMaxBytes * 100) : 0;
+          const fill = document.getElementById('mem-fill');
+          fill.style.width = pct.toFixed(1) + '%';
+          fill.className = pct > 90 ? 'critical' : pct > 75 ? 'high' : '';
+          const toMb = v => (v / 1048576).toFixed(0);
+          document.getElementById('mem-label').textContent =
+            'Heap: ' + toMb(t.heapUsedBytes) + ' MB / ' + toMb(t.heapMaxBytes) + ' MB';
+          document.getElementById('proj-status').textContent = t.status;
+          if (t.classCount > 0) {
+            document.getElementById('class-count').textContent = String(t.classCount);
+          }
+        }
       } else if (msg.command === 'telemetry') {
         const pct = msg.heapMaxBytes > 0 ? (msg.heapUsedBytes / msg.heapMaxBytes * 100) : 0;
         const fill = document.getElementById('mem-fill');
@@ -214,5 +272,16 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
   private _getNonce(): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     return Array.from({ length: 32 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  }
+
+  private _pushState(): void {
+    this._view?.webview.postMessage({
+      command: 'state',
+      phase: this._state.phase,
+      apkPath: this._state.apkPath,
+      initStatus: this._state.initStatus,
+      classCount: this._state.classCount,
+      telemetry: this._state.telemetry
+    });
   }
 }

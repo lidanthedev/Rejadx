@@ -170,8 +170,6 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 if (target == null) {
                     throw new IllegalArgumentException("No renameable symbol at position " + pos);
                 }
-                log.info("rename target: kind={} name={} uri={} line={} char={}",
-                        target.getKind(), target.getName(), uri, pos.getLine(), pos.getCharacter());
 
                 if (!newName.isEmpty() && !isValidIdentifier(newName)) {
                     throw new IllegalArgumentException("Invalid identifier: " + newName);

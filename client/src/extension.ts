@@ -9,23 +9,8 @@ interface SourceReadyParams {
   languageId: string;
 }
 
-interface LspPosition {
-  line: number;
-  character: number;
-}
-
-interface LspRange {
-  start: LspPosition;
-  end: LspPosition;
-}
-
-interface LspTextEdit {
-  range: LspRange;
-  newText: string;
-}
-
 interface LspWorkspaceEdit {
-  changes?: Record<string, LspTextEdit[]>;
+  changes?: Record<string, unknown[]>;
 }
 
 interface CommentLookupResult {
@@ -113,24 +98,6 @@ class JadxContentProvider implements vscode.TextDocumentContentProvider {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const applyLspWorkspaceEdit = async (edit: LspWorkspaceEdit): Promise<boolean> => {
-    const wsEdit = new vscode.WorkspaceEdit();
-    const changes = edit?.changes ?? {};
-    for (const [uri, edits] of Object.entries(changes)) {
-      const docUri = vscode.Uri.parse(uri);
-      for (const e of edits ?? []) {
-        const range = new vscode.Range(
-          e.range.start.line,
-          e.range.start.character,
-          e.range.end.line,
-          e.range.end.character
-        );
-        wsEdit.replace(docUri, range, e.newText);
-      }
-    }
-    return vscode.workspace.applyEdit(wsEdit);
-  };
-
   const contentProvider = new JadxContentProvider();
   // Register BEFORE starting LSP to avoid a race on the first sourceReady notification.
   context.subscriptions.push(
@@ -169,6 +136,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       vscode.window.showErrorMessage('ReJadx: Language server not ready.');
       return;
     }
+
+    dashboardProvider.notifyProjectLoading(apkPath);
+
     try {
       const result = await lc.sendRequest('workspace/executeCommand', {
         command: 'rejadx.loadProject',
@@ -342,10 +312,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         position: { line: pos.line, character: pos.character },
         newName
       }) as LspWorkspaceEdit;
-      const applied = await applyLspWorkspaceEdit(edit);
-      if (!applied) {
+
+      const uriKey = editor.document.uri.toString();
+      const hasChange = (edit?.changes?.[uriKey]?.length ?? 0) > 0;
+      if (!hasChange) {
         vscode.window.showWarningMessage('ReJadx: rename edit was not applied.');
+        return;
       }
+
+      // Force a full document refresh from the server to avoid stale line/range artifacts.
+      contentProvider.invalidate(uriKey);
     } catch (err) {
       vscode.window.showErrorMessage(`ReJadx: rename failed: ${err}`);
     }

@@ -217,11 +217,18 @@ public class JadxAdapter implements IDecompilerEngine {
 
     @Override
     public String applyRename(IJavaNodeRef nodeRef, IJavaCodeRef codeRef, String newName) throws Exception {
+        JavaNode node = resolveNodeRef(nodeRef);
+
+        boolean resetToOriginal = newName == null || newName.isEmpty();
+        if (resetToOriginal && codeRef == null && node != null) {
+            // Node-level reset must remove runtime alias directly, otherwise jadx can
+            // re-introduce synthetic aliases in subsequent passes.
+            node.removeAlias();
+        }
+
         List<ICodeRename> renames = new ArrayList<>(liveCodeData.getRenames());
         renames.removeIf(r -> r.getNodeRef().equals(nodeRef)
                 && java.util.Objects.equals(r.getCodeRef(), codeRef));
-
-        boolean resetToOriginal = newName == null || newName.isEmpty();
         if (!resetToOriginal) {
             renames.add(new JadxCodeRename(nodeRef, codeRef, newName));
         }
@@ -344,6 +351,29 @@ public class JadxAdapter implements IDecompilerEngine {
             return findClass(declClass);
         } catch (ClassNotFoundException e) {
             log.warn("Could not find affected class for ref: {}", nodeRef);
+            return null;
+        }
+    }
+
+    private JavaNode resolveNodeRef(IJavaNodeRef nodeRef) {
+        try {
+            JavaClass cls = findAffectedClass(nodeRef);
+            if (cls == null) {
+                return null;
+            }
+            return switch (nodeRef.getType()) {
+                case CLASS -> cls;
+                case FIELD -> cls.getFields().stream()
+                        .filter(f -> f.getFieldNode().getFieldInfo().getShortId().equals(nodeRef.getShortId()))
+                        .findFirst()
+                        .orElse(null);
+                case METHOD -> cls.getMethods().stream()
+                        .filter(m -> m.getMethodNode().getMethodInfo().getShortId().equals(nodeRef.getShortId()))
+                        .findFirst()
+                        .orElse(null);
+                default -> null;
+            };
+        } catch (Exception e) {
             return null;
         }
     }
