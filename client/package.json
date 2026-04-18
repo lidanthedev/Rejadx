@@ -58,11 +58,11 @@
       },
       {
         "command": "jadx.openSideBySide",
-        "title": "Jadx: Open Java & Smali Side-by-Side"
+        "title": "ReJadx: Open Java & Smali Side-by-Side"
       },
       {
         "command": "jadx.exportProGuard",
-        "title": "Jadx: Export ProGuard Mappings"
+        "title": "ReJadx: Export ProGuard Mappings"
       }
     ],
     "keybindings": [

@@ -25,12 +25,14 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     apkPath: string;
     initStatus: string;
     classCount: number;
+    recentProjects: string[];
     telemetry?: TelemetryUpdate;
   } = {
     phase: 'init',
     apkPath: '',
     initStatus: 'No project loaded.',
-    classCount: 0
+    classCount: 0,
+    recentProjects: []
   };
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
@@ -68,6 +70,11 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
   setBrowseHandler(fn: () => Promise<void>): void { this._onBrowseFn = fn; }
   setRestartProjectHandler(fn: () => Promise<void>): void { this._onRestartProjectFn = fn; }
   setStopProjectHandler(fn: () => Promise<void>): void { this._onStopProjectFn = fn; }
+
+  setRecentProjects(projects: string[]): void {
+    this._state.recentProjects = [...projects];
+    this._pushState();
+  }
 
   setApkPath(path: string): void {
     this._state.apkPath = path;
@@ -192,6 +199,21 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     #mem-fill.high { background: var(--vscode-charts-orange); }
     #mem-fill.critical { background: var(--vscode-charts-red); }
     #mem-label { font-size: 0.8em; color: var(--vscode-descriptionForeground); }
+    .recent {
+      margin-top: 10px;
+      border-top: 1px solid var(--vscode-panel-border);
+      padding-top: 8px;
+    }
+    .recent-item {
+      width: 100%;
+      text-align: left;
+      margin-bottom: 4px;
+      background: var(--vscode-inputOption-activeBackground, var(--vscode-button-secondaryBackground));
+      color: var(--vscode-inputOption-activeForeground, var(--vscode-button-secondaryForeground));
+      border: 1px solid var(--vscode-inputOption-activeBorder, transparent);
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   </style>
 </head>
 <body>
@@ -217,6 +239,11 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     <div class="kv"><span>Classes</span><span id="class-count" class="val">0</span></div>
     <div class="mem-wrap"><div id="mem-fill"></div></div>
     <div id="mem-label">Heap: — MB / — MB</div>
+  </div>
+
+  <div id="recent-wrap" class="recent">
+    <h2>Recent</h2>
+    <div id="recent-list"></div>
   </div>
 
   <script nonce="${nonce}">
@@ -252,6 +279,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
         const init = document.getElementById('init');
         const dash = document.getElementById('dash');
+        const recentWrap = document.getElementById('recent-wrap');
         const initStatus = document.getElementById('init-status');
         const openBtn = document.getElementById('open-btn');
 
@@ -262,6 +290,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         const showDashboard = phase === 'loading' || phase === 'loaded';
         init.style.display = showDashboard ? 'none' : 'block';
         dash.style.display = showDashboard ? 'block' : 'none';
+        recentWrap.style.display = phase === 'init' ? 'block' : 'none';
 
         initStatus.textContent = msg.initStatus || (phase === 'loading' ? 'Loading...' : 'No project loaded.');
         openBtn.disabled = phase === 'loading';
@@ -282,6 +311,27 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
           document.getElementById('proj-status').textContent = t.status;
           if (t.classCount > 0) {
             document.getElementById('class-count').textContent = String(t.classCount);
+          }
+        }
+
+        const recent = Array.isArray(msg.recentProjects) ? msg.recentProjects : [];
+        const recentList = document.getElementById('recent-list');
+        recentList.innerHTML = '';
+        if (recent.length === 0) {
+          const empty = document.createElement('div');
+          empty.id = 'init-status';
+          empty.textContent = 'No recent projects.';
+          recentList.appendChild(empty);
+        } else {
+          for (const path of recent) {
+            const btn = document.createElement('button');
+            btn.className = 'recent-item';
+            btn.title = path;
+            btn.textContent = path;
+            btn.addEventListener('click', () => {
+              vscode.postMessage({ command: 'openApk', apkPath: path });
+            });
+            recentList.appendChild(btn);
           }
         }
       } else if (msg.command === 'telemetry') {
@@ -315,6 +365,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       apkPath: this._state.apkPath,
       initStatus: this._state.initStatus,
       classCount: this._state.classCount,
+      recentProjects: this._state.recentProjects,
       telemetry: this._state.telemetry
     });
   }

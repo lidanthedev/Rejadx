@@ -25,6 +25,8 @@ interface CommentLookupResult {
 }
 
 let currentExtensionContext: vscode.ExtensionContext | undefined;
+const RECENT_PROJECTS_KEY = 'recentProjects';
+const MAX_RECENT_PROJECTS = 5;
 
 async function hardRestartLanguageClient(): Promise<void> {
   await stopLanguageClient();
@@ -138,6 +140,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
+  const getRecentProjects = (): string[] => {
+    const saved = context.workspaceState.get<string[]>(RECENT_PROJECTS_KEY);
+    return Array.isArray(saved) ? saved.filter(Boolean) : [];
+  };
+
+  const saveRecentProjects = async (projects: string[]): Promise<void> => {
+    await context.workspaceState.update(RECENT_PROJECTS_KEY, projects);
+    dashboardProvider.setRecentProjects(projects);
+  };
+
+  const pushRecentProject = async (apkPath: string): Promise<void> => {
+    const current = getRecentProjects().filter(p => p !== apkPath);
+    current.unshift(apkPath);
+    await saveRecentProjects(current.slice(0, MAX_RECENT_PROJECTS));
+  };
+
+  dashboardProvider.setRecentProjects(getRecentProjects());
+
   ensureClientStarted = async (): Promise<NonNullable<ReturnType<typeof getClient>>> => {
     if (!getClient()) {
       await startLanguageClient(context);
@@ -203,6 +223,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
 
       lastLoadedApkPath = apkPath;
+      await pushRecentProject(apkPath);
       dashboardProvider.notifyProjectLoaded(result.classCount ?? 0);
 
       const packages = await lc.sendRequest('workspace/executeCommand', {
