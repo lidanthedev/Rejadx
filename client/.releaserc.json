@@ -2,6 +2,7 @@
   "branches": [
     "master"
   ],
+  "repositoryUrl": "https://github.com/lidanthedev/Rejadx.git",
   "tagFormat": "v${version}",
   "plugins": [
     [
@@ -19,20 +20,20 @@
     [
       "@semantic-release/changelog",
       {
-        "changelogFile": "CHANGELOG.md"
+        "changelogFile": "../CHANGELOG.md"
       }
     ],
     [
       "@semantic-release/npm",
       {
-        "pkgRoot": "client",
+        "pkgRoot": ".",
         "npmPublish": false
       }
     ],
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "npm --prefix ./client run package && npx --yes @vscode/vsce package --cwd ./client"
+        "prepareCmd": "npm run prepare:serverJar && npm run package && npx --yes @vscode/vsce package"
       }
     ],
     [
@@ -40,7 +41,7 @@
       {
         "assets": [
           {
-            "path": "client/*.vsix",
+            "path": "*.vsix",
             "label": "ReJadx VSIX"
           }
         ]
@@ -50,11 +51,11 @@
       "@semantic-release/git",
       {
         "assets": [
-          "CHANGELOG.md",
-          "client/package.json",
-          "client/package-lock.json"
+          "../CHANGELOG.md",
+          "package.json",
+          "package-lock.json"
         ],
-        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        "message": "chore(release): ${nextRelease.version} [skip ci]\\n\\n${nextRelease.notes}"
       }
     ]
   ]
