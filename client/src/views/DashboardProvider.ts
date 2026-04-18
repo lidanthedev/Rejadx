@@ -218,19 +218,26 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     window.addEventListener('message', e => {
       const msg = e.data;
       if (msg.command === 'state') {
-        document.getElementById('apk-path').value = msg.apkPath || '';
+        const pathInput = document.getElementById('apk-path');
+        if (typeof msg.apkPath === 'string' && msg.apkPath.length > 0) {
+          pathInput.value = msg.apkPath;
+        }
 
         const init = document.getElementById('init');
         const dash = document.getElementById('dash');
         const initStatus = document.getElementById('init-status');
         const openBtn = document.getElementById('open-btn');
 
-        const showDashboard = msg.phase === 'loading' || msg.phase === 'loaded';
+        const phase = (msg.phase === 'init' || msg.phase === 'loading' || msg.phase === 'loaded')
+          ? msg.phase
+          : 'init';
+
+        const showDashboard = phase === 'loading' || phase === 'loaded';
         init.style.display = showDashboard ? 'none' : 'block';
         dash.style.display = showDashboard ? 'block' : 'none';
 
-        initStatus.textContent = msg.initStatus || 'No project loaded.';
-        openBtn.disabled = msg.phase === 'loading';
+        initStatus.textContent = msg.initStatus || (phase === 'loading' ? 'Loading...' : 'No project loaded.');
+        openBtn.disabled = phase === 'loading';
 
         if (typeof msg.classCount === 'number') {
           document.getElementById('class-count').textContent = String(msg.classCount);

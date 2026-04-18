@@ -98,6 +98,9 @@ class JadxContentProvider implements vscode.TextDocumentContentProvider {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  let clientHooksInstalled = false;
+  let ensureClientStarted: () => Promise<NonNullable<ReturnType<typeof getClient>>>;
+
   const contentProvider = new JadxContentProvider();
   // Register BEFORE starting LSP to avoid a race on the first sourceReady notification.
   context.subscriptions.push(
@@ -117,6 +120,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     })
   );
 
+  ensureClientStarted = async (): Promise<NonNullable<ReturnType<typeof getClient>>> => {
+    if (!getClient()) {
+      await startLanguageClient(context);
+    }
+
+    const client = getClient();
+    if (!client) {
+      throw new Error('Language server failed to start');
+    }
+
+    if (!clientHooksInstalled) {
+      client.onNotification('rejadx/sourceReady', (params: SourceReadyParams) => {
+        contentProvider.update(params.uri, params.content);
+
+        const uri = vscode.Uri.parse(params.uri);
+        const openDoc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
+        if (openDoc) {
+          const desired = params.languageId === 'smali' ? 'plaintext' : 'java';
+          if (openDoc.languageId !== desired) {
+            void vscode.languages.setTextDocumentLanguage(openDoc, desired).then(() => undefined, () => undefined);
+          }
+        }
+      });
+
+      client.onNotification('rejadx/telemetry', (params: TelemetryUpdate) => {
+        dashboardProvider.updateTelemetry(params);
+      });
+
+      clientHooksInstalled = true;
+    }
+
+    return client;
+  };
+
   dashboardProvider.setBrowseHandler(async () => {
     const uris = await vscode.window.showOpenDialog({
       canSelectFiles: true,
@@ -131,15 +168,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   dashboardProvider.setOpenApkHandler(async (apkPath: string) => {
-    const lc = getClient();
-    if (!lc) {
-      vscode.window.showErrorMessage('ReJadx: Language server not ready.');
-      return;
-    }
-
     dashboardProvider.notifyProjectLoading(apkPath);
 
     try {
+      const lc = await ensureClientStarted();
       const result = await lc.sendRequest('workspace/executeCommand', {
         command: 'rejadx.loadProject',
         arguments: [apkPath]
@@ -164,27 +196,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   });
 
-  await startLanguageClient(context);
-
-  const lc = getClient()!;
-
-  lc.onNotification('rejadx/sourceReady', (params: SourceReadyParams) => {
-    contentProvider.update(params.uri, params.content);
-
-    const uri = vscode.Uri.parse(params.uri);
-    const openDoc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
-    if (openDoc) {
-      const desired = params.languageId === 'smali' ? 'plaintext' : 'java';
-      if (openDoc.languageId !== desired) {
-        void vscode.languages.setTextDocumentLanguage(openDoc, desired).then(() => undefined, () => undefined);
-      }
-    }
-  });
-
-  lc.onNotification('rejadx/telemetry', (params: TelemetryUpdate) => {
-    dashboardProvider.updateTelemetry(params);
-  });
-
   context.subscriptions.push(vscode.workspace.onDidOpenTextDocument((doc) => {
     void ensureJadxDocumentLanguage(doc);
   }));
@@ -205,16 +216,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     const client = getClient();
-    if (!client) {
-      vscode.window.showErrorMessage('ReJadx: Language server not ready.');
-      return;
-    }
+    const readyClient = client ?? await ensureClientStarted();
 
     const pos = editor.selection.active;
 
     let initialComment = '';
     try {
-      const lookup = await client.sendRequest('workspace/executeCommand', {
+      const lookup = await readyClient.sendRequest('workspace/executeCommand', {
         command: 'rejadx.getComment',
         arguments: [{
           uri: uri.toString(),
@@ -240,7 +248,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     try {
-      const res = await client.sendRequest('jadx/addComment', {
+      const res = await readyClient.sendRequest('jadx/addComment', {
         uri: uri.toString(),
         line: pos.line,
         character: pos.character,
@@ -300,14 +308,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     const client = getClient();
-    if (!client) {
-      vscode.window.showErrorMessage('ReJadx: Language server not ready.');
-      return;
-    }
+    const readyClient = client ?? await ensureClientStarted();
 
     try {
       const pos = editor.selection.active;
-      const edit = await client.sendRequest('textDocument/rename', {
+      const edit = await readyClient.sendRequest('textDocument/rename', {
         textDocument: { uri: editor.document.uri.toString() },
         position: { line: pos.line, character: pos.character },
         newName
