@@ -143,9 +143,9 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run prepare:serverJar && npm run package",
-    "compile": "webpack --config ./webpack.config.js",
-    "watch": "webpack --config ./webpack.config.js --watch",
-    "package": "webpack --config ./webpack.config.js --mode production --devtool hidden-source-map",
+    "compile": "webpack --config ./webpack.config.cjs",
+    "watch": "webpack --config ./webpack.config.cjs --watch",
+    "package": "webpack --config ./webpack.config.cjs --mode production --devtool hidden-source-map",
     "build:serverJar": "../server/gradlew -p ../server shadowJar",
     "bundle:serverJar": "node -e \"const fs=require('fs');fs.mkdirSync('bin',{recursive:true});fs.copyFileSync('../server/build/libs/rejadx-server-all.jar','bin/jadx-server.jar');\"",
     "prepare:serverJar": "npm run build:serverJar && npm run bundle:serverJar",
