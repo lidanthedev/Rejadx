@@ -32,7 +32,8 @@ public class ReJadxLanguageServer implements LanguageServer, LanguageClientAware
             "rejadx.addComment",
             "rejadx.exportMappings",
             "rejadx.closeProject",
-            "rejadx.saveProject"
+            "rejadx.saveProject",
+            "rejadx.resetCodeCache"
     );
 
     private final DecompilerManager manager = new DecompilerManager();

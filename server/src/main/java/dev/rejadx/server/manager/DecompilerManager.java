@@ -2,6 +2,7 @@ package dev.rejadx.server.manager;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
@@ -10,6 +11,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -171,6 +173,61 @@ public class DecompilerManager {
         }
     }
 
+    public CompletableFuture<Object> resetCodeCache() {
+        final Path inputFile;
+        final Path cacheDir;
+        final IDecompilerEngine oldEngine;
+
+        lock.writeLock().lock();
+        try {
+            if (currentInputFile == null || currentCacheDir == null || engine == null) {
+                return CompletableFuture.completedFuture(Map.of(
+                        "reset", false,
+                        "error", "No project loaded"));
+            }
+
+            try {
+                saveCurrentProjectStateUnsafe();
+            } catch (Exception e) {
+                log.warn("Failed to persist project state before cache reset: {}", e.getMessage());
+            }
+
+            inputFile = currentInputFile;
+            cacheDir = currentCacheDir;
+            oldEngine = engine;
+
+            engine = null;
+            currentInputFile = null;
+            currentCacheDir = null;
+            setStatus("idle");
+        } finally {
+            lock.writeLock().unlock();
+        }
+
+        return CompletableFuture.runAsync(() -> {
+            try {
+                oldEngine.close();
+            } catch (Exception e) {
+                log.warn("Failed to close engine during cache reset: {}", e.getMessage());
+            }
+            clearDirectory(cacheDir);
+        }, workPool).thenCompose(ignored -> loadProject(inputFile)).thenApply(loadResult -> {
+            Map<String, Object> out = new HashMap<>();
+            out.put("reset", true);
+            out.put("cacheDir", cacheDir.toString());
+            if (loadResult instanceof Map<?, ?> loadedMap) {
+                loadedMap.forEach((k, v) -> {
+                    if (k instanceof String key) {
+                        out.put(key, v);
+                    }
+                });
+            } else {
+                out.put("loaded", true);
+            }
+            return (Object) out;
+        });
+    }
+
     public void shutdown() {
         if (telemetryFuture != null) telemetryFuture.cancel(false);
         telemetryScheduler.shutdown();
@@ -188,6 +245,26 @@ public class DecompilerManager {
 
     private void setStatus(String s) {
         status = s;
+    }
+
+    private void clearDirectory(Path dir) {
+        if (dir == null || !Files.exists(dir)) {
+            return;
+        }
+        try (Stream<Path> stream = Files.walk(dir)) {
+            stream.sorted((a, b) -> b.getNameCount() - a.getNameCount())
+                    .forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to delete " + path + ": " + e.getMessage(), e);
+                        }
+                    });
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to reset cache directory: " + dir, e);
+        }
     }
 
     private void pushTelemetry() {

@@ -19,6 +19,7 @@ import dev.rejadx.server.commands.GetCommentCommand;
 import dev.rejadx.server.commands.GetPackagesCommand;
 import dev.rejadx.server.commands.GetSourceCommand;
 import dev.rejadx.server.commands.LoadProjectCommand;
+import dev.rejadx.server.commands.ResetCodeCacheCommand;
 import dev.rejadx.server.commands.SaveProjectCommand;
 import dev.rejadx.server.commands.SearchCodeCommand;
 import dev.rejadx.server.commands.SetSettingsCommand;
@@ -39,6 +40,7 @@ public class ReJadxWorkspaceService implements WorkspaceService {
         commands.put("rejadx.exportMappings", new ExportMappingsCommand(manager)::execute);
         commands.put("rejadx.closeProject", new CloseProjectCommand(manager)::execute);
         commands.put("rejadx.saveProject",  new SaveProjectCommand(manager)::execute);
+        commands.put("rejadx.resetCodeCache", new ResetCodeCacheCommand(manager)::execute);
     }
 
     public void setClient(ReJadxClient client) {

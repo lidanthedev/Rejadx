@@ -35,6 +35,14 @@ interface CommentLookupResult {
   style: string;
 }
 
+interface ResetCodeCacheResult {
+  reset: boolean;
+  loaded?: boolean;
+  classCount?: number;
+  cacheDir?: string;
+  error?: string;
+}
+
 let currentExtensionContext: vscode.ExtensionContext | undefined;
 let persistOnDeactivate: (() => Promise<void>) | undefined;
 let closeTabsOnDeactivate: (() => Promise<void>) | undefined;
@@ -289,7 +297,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           preview: false,
           preserveFocus: true
         });
-        await new Promise(resolve => setTimeout(resolve, 40));
+        await new Promise(resolve => setTimeout(resolve, 100));
       } catch {
         // Skip tabs that fail to restore.
       }
@@ -672,6 +680,48 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       vscode.window.showInformationMessage(`ReJadx: ProGuard mapping exported to ${target.fsPath}`);
     } catch (err) {
       vscode.window.showErrorMessage(`ReJadx: export mappings failed: ${err}`);
+    }
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('rejadx.resetProjectCodeCache', async () => {
+    try {
+      await persistCurrentProjectTabs();
+      await closeVirtualTabsAfterSave();
+
+      if (lastLoadedApkPath) {
+        dashboardProvider.notifyProjectLoading(lastLoadedApkPath);
+      }
+
+      const readyClient = getClient() ?? await ensureClientStarted();
+      const res = await readyClient.sendRequest('workspace/executeCommand', {
+        command: 'rejadx.resetCodeCache',
+        arguments: []
+      }) as ResetCodeCacheResult;
+
+      if (!res?.reset || res.loaded === false) {
+        const reason = res?.error ?? 'Failed to reset code cache';
+        if (lastLoadedApkPath) {
+          dashboardProvider.notifyProjectLoadFailed(reason);
+        }
+        vscode.window.showErrorMessage(`ReJadx: ${reason}`);
+        return;
+      }
+
+      const packages = await readyClient.sendRequest('workspace/executeCommand', {
+        command: 'rejadx.getPackages',
+        arguments: []
+      }) as PackageNode[];
+      classTreeProvider.setRoots(packages);
+
+      if (lastLoadedApkPath) {
+        dashboardProvider.notifyProjectLoaded(res.classCount ?? 0);
+        await restoreProjectTabs(lastLoadedApkPath);
+      }
+
+      const cacheInfo = res.cacheDir ? ` (${res.cacheDir})` : '';
+      vscode.window.showInformationMessage(`ReJadx: code cache reset${cacheInfo}.`);
+    } catch (err) {
+      vscode.window.showErrorMessage(`ReJadx: reset code cache failed: ${err}`);
     }
   }));
 
