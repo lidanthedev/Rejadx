@@ -37,6 +37,7 @@ interface CommentLookupResult {
 
 let currentExtensionContext: vscode.ExtensionContext | undefined;
 let persistOnDeactivate: (() => Promise<void>) | undefined;
+let closeTabsOnDeactivate: (() => Promise<void>) | undefined;
 const RECENT_PROJECTS_KEY = 'recentProjects';
 const MAX_RECENT_PROJECTS = 5;
 const PROJECT_OPEN_TABS_KEY = 'projectOpenTabs';
@@ -150,6 +151,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let clientHooksInstalled = false;
   let lastLoadedApkPath: string | undefined;
   let dashboardInitialized = false;
+  let suppressTabPersistence = false;
   let ensureClientStarted: () => Promise<NonNullable<ReturnType<typeof getClient>>>;
   let initDashboardState: () => Promise<void>;
 
@@ -199,6 +201,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return [...new Set(uris)];
   };
 
+  const getOpenJadxTabs = (): vscode.Tab[] => {
+    const tabs: vscode.Tab[] = [];
+    for (const group of vscode.window.tabGroups.all) {
+      for (const tab of group.tabs) {
+        const input = tab.input as unknown as { uri?: vscode.Uri };
+        if (input?.uri?.scheme === 'jadx') {
+          tabs.push(tab);
+        }
+      }
+    }
+    return tabs;
+  };
+
   const persistCurrentProjectTabs = async (): Promise<void> => {
     if (!lastLoadedApkPath) {
       return;
@@ -211,8 +226,37 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   persistOnDeactivate = persistCurrentProjectTabs;
 
+  const closeVirtualTabsAfterSave = async (): Promise<void> => {
+    const tabs = getOpenJadxTabs();
+    if (tabs.length === 0) {
+      return;
+    }
+
+    // Drop cached virtual content before closing so next open always refetches.
+    for (const tab of tabs) {
+      const input = tab.input as unknown as { uri?: vscode.Uri };
+      if (input?.uri) {
+        contentProvider.invalidate(input.uri.toString());
+      }
+    }
+
+    suppressTabPersistence = true;
+    try {
+      await vscode.window.tabGroups.close(tabs, true);
+    } catch {
+      // Best effort.
+    } finally {
+      suppressTabPersistence = false;
+    }
+  };
+
+  closeTabsOnDeactivate = closeVirtualTabsAfterSave;
+
   let persistTabsTimer: NodeJS.Timeout | undefined;
   const schedulePersistTabs = (): void => {
+    if (suppressTabPersistence) {
+      return;
+    }
     if (persistTabsTimer) {
       clearTimeout(persistTabsTimer);
     }
@@ -232,6 +276,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       return;
     }
 
+    // Give language client/server a moment to fully settle after load/restart.
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     const alreadyOpen = new Set(vscode.workspace.textDocuments.map(d => d.uri.toString()));
     for (const raw of saved) {
       if (!raw || alreadyOpen.has(raw)) {
@@ -242,6 +289,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           preview: false,
           preserveFocus: true
         });
+        await new Promise(resolve => setTimeout(resolve, 40));
       } catch {
         // Skip tabs that fail to restore.
       }
@@ -368,6 +416,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   dashboardProvider.setRestartProjectHandler(async () => {
     try {
       await persistCurrentProjectTabs();
+      await closeVirtualTabsAfterSave();
 
       await hardRestartLanguageClient();
       clientHooksInstalled = false;
@@ -416,6 +465,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   dashboardProvider.setStopProjectHandler(async () => {
     try {
       await persistCurrentProjectTabs();
+      await closeVirtualTabsAfterSave();
 
       await stopLanguageClient();
       clientHooksInstalled = false;
@@ -713,6 +763,9 @@ export async function deactivate(): Promise<void> {
   try {
     if (persistOnDeactivate) {
       await persistOnDeactivate();
+    }
+    if (closeTabsOnDeactivate) {
+      await closeTabsOnDeactivate();
     }
   } catch {
     // ignore
