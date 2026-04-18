@@ -12,8 +12,14 @@ It provides jadx-style workflows inside VS Code, including:
 - Dashboard controls for open/restart/stop and runtime telemetry
 
 ## Screenshots
+### Code View
 <img width="1852" height="978" alt="image" src="https://github.com/user-attachments/assets/f088ace7-9b67-4396-8d6b-107235cac312" />
+
+### Code Search
 <img width="1454" height="334" alt="image" src="https://github.com/user-attachments/assets/62db1b62-e51d-460e-bdfa-4f933695498b" />
+
+### Smali Side by side
+<img width="1489" height="992" alt="image" src="https://github.com/user-attachments/assets/327bc0df-270b-4ebf-b40d-74699400de0d" />
 
 
 ## Repository Layout
