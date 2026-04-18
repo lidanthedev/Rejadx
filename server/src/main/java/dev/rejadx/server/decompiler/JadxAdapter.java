@@ -69,6 +69,7 @@ public class JadxAdapter implements IDecompilerEngine {
     private String customArgs = "";
     private boolean enableExternalPlugins;
     private boolean enableCodeCache = true;
+    private boolean showInconsistentCode = false;
 
     public void setCustomArgs(String customArgs) {
         this.customArgs = customArgs == null ? "" : customArgs;
@@ -80,6 +81,10 @@ public class JadxAdapter implements IDecompilerEngine {
 
     public void setEnableCodeCache(boolean enableCodeCache) {
         this.enableCodeCache = enableCodeCache;
+    }
+
+    public void setShowInconsistentCode(boolean showInconsistentCode) {
+        this.showInconsistentCode = showInconsistentCode;
     }
 
     @Override
@@ -94,6 +99,7 @@ public class JadxAdapter implements IDecompilerEngine {
         args.setOutDirSrc(cacheDir.resolve("src").toFile());
         args.setOutDirRes(cacheDir.resolve("res").toFile());
         args.setCodeData(liveCodeData);
+        args.setShowInconsistentCode(showInconsistentCode);
 
         if (enableCodeCache) {
             Path cacheRoot = cacheDir.resolve("code-cache");

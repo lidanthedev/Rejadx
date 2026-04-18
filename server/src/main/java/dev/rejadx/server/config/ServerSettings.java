@@ -4,6 +4,7 @@ public class ServerSettings {
     private volatile String customArgs = "";
     private volatile boolean enableExternalPlugins = false;
     private volatile boolean enableCodeCache = true;
+    private volatile boolean showInconsistentCode = false;
 
     public String getCustomArgs() {
         return customArgs;
@@ -27,5 +28,13 @@ public class ServerSettings {
 
     public void setEnableCodeCache(boolean enableCodeCache) {
         this.enableCodeCache = enableCodeCache;
+    }
+
+    public boolean isShowInconsistentCode() {
+        return showInconsistentCode;
+    }
+
+    public void setShowInconsistentCode(boolean showInconsistentCode) {
+        this.showInconsistentCode = showInconsistentCode;
     }
 }

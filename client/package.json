@@ -39,6 +39,11 @@
           "default": true,
           "description": "Enable hybrid cache (in-memory + disk-backed code strings). If disabled, uses in-memory code cache only."
         },
+        "rejadx.showInconsistentCode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show code for methods with inconsistent decompilation (maps to JADX --show-inconsistent-code)."
+        },
         "rejadx.jadxJarPath": {
           "type": "string",
           "default": "",

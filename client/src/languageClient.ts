@@ -160,6 +160,7 @@ export interface ReJadxClientSettings {
   customJadxArgs: string;
   enableExternalPlugins: boolean;
   enableCodeCache: boolean;
+  showInconsistentCode: boolean;
   jadxJarPath: string;
 }
 
@@ -169,8 +170,9 @@ export function getReJadxSettings(): ReJadxClientSettings {
   const customJadxArgs = cfg.get<string>('customJadxArgs', '');
   const enableExternalPlugins = cfg.get<boolean>('enableExternalPlugins', false);
   const enableCodeCache = cfg.get<boolean>('enableCodeCache', true);
+  const showInconsistentCode = cfg.get<boolean>('showInconsistentCode', false);
   const jadxJarPath = cfg.get<string>('jadxJarPath', '');
-  return { searchMaxResults, customJadxArgs, enableExternalPlugins, enableCodeCache, jadxJarPath };
+  return { searchMaxResults, customJadxArgs, enableExternalPlugins, enableCodeCache, showInconsistentCode, jadxJarPath };
 }
 
 export async function stopLanguageClient(): Promise<void> {

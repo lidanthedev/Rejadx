@@ -104,6 +104,7 @@ public class DecompilerManager {
             newEngine.setCustomArgs(settings.getCustomArgs());
             newEngine.setEnableExternalPlugins(settings.isEnableExternalPlugins());
             newEngine.setEnableCodeCache(settings.isEnableCodeCache());
+            newEngine.setShowInconsistentCode(settings.isShowInconsistentCode());
             try {
                 setStatus("decompiling");
                 newEngine.load(inputFile, cacheDir, existingData);

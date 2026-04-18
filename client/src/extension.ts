@@ -483,7 +483,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         arguments: [{
           customArgs: settings.customJadxArgs ?? '',
           enableExternalPlugins: settings.enableExternalPlugins,
-          enableCodeCache: settings.enableCodeCache
+          enableCodeCache: settings.enableCodeCache,
+          showInconsistentCode: settings.showInconsistentCode
         }]
       }) as ServerSettingsResult;
 
@@ -544,7 +545,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           arguments: [{
             customArgs: settings.customJadxArgs ?? '',
             enableExternalPlugins: settings.enableExternalPlugins,
-            enableCodeCache: settings.enableCodeCache
+            enableCodeCache: settings.enableCodeCache,
+            showInconsistentCode: settings.showInconsistentCode
           }]
         }) as ServerSettingsResult;
 

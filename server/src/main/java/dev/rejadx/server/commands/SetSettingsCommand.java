@@ -31,6 +31,7 @@ public class SetSettingsCommand {
         manager.getSettings().setCustomArgs(p.customArgs);
         manager.getSettings().setEnableExternalPlugins(p.enableExternalPlugins);
         manager.getSettings().setEnableCodeCache(p.enableCodeCache);
+        manager.getSettings().setShowInconsistentCode(p.showInconsistentCode);
         return CompletableFuture.completedFuture(Map.of("applied", true));
     }
 
@@ -38,5 +39,6 @@ public class SetSettingsCommand {
         String customArgs = "";
         boolean enableExternalPlugins = false;
         boolean enableCodeCache = true;
+        boolean showInconsistentCode = false;
     }
 }
