@@ -10,6 +10,7 @@ import jadx.api.data.IJavaNodeRef;
 import jadx.api.data.impl.JadxCodeData;
 
 import dev.rejadx.server.model.PackageNode;
+import dev.rejadx.server.model.RenameTarget;
 import dev.rejadx.server.model.ResolvedNode;
 import dev.rejadx.server.model.SourceType;
 import dev.rejadx.server.model.XrefLocation;
@@ -42,13 +43,15 @@ public interface IDecompilerEngine extends Closeable {
 
     ResolvedNode resolveNodeAt(String rawClassName, int charOffset) throws ClassNotFoundException;
 
+    RenameTarget resolveRenameTargetAt(String rawClassName, int charOffset) throws ClassNotFoundException;
+
     // --- Mutations ---
 
     /**
      * Applies a rename to the live code data and reloads the affected class + its immediate callers.
      * Returns the new source of the directly renamed class for pushing to the client.
      */
-    String applyRename(IJavaNodeRef nodeRef, String newName) throws Exception;
+    String applyRename(IJavaNodeRef nodeRef, jadx.api.data.IJavaCodeRef codeRef, String newName) throws Exception;
 
     /**
      * Injects a comment into the live code data and reloads the owning class.

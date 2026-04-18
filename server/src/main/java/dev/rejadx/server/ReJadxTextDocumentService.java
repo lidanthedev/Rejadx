@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
 import dev.rejadx.server.client.ReJadxClient;
 import dev.rejadx.server.decompiler.IDecompilerEngine;
 import dev.rejadx.server.manager.DecompilerManager;
-import dev.rejadx.server.model.ResolvedNode;
+import dev.rejadx.server.model.RenameTarget;
 import dev.rejadx.server.model.SourceReadyParams;
 import dev.rejadx.server.model.SourceType;
 import dev.rejadx.server.model.XrefLocation;
@@ -166,9 +166,15 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 String oldSource = engine.getSource(parsed.rawClassName(), SourceType.JAVA);
                 int charOffset = lineCharToOffset(oldSource, pos.getLine(), pos.getCharacter());
 
-                ResolvedNode resolved = engine.resolveNodeAt(parsed.rawClassName(), charOffset);
-                if (resolved == null) {
+                RenameTarget target = engine.resolveRenameTargetAt(parsed.rawClassName(), charOffset);
+                if (target == null) {
                     throw new IllegalArgumentException("No renameable symbol at position " + pos);
+                }
+                log.info("rename target: kind={} name={} uri={} line={} char={}",
+                        target.getKind(), target.getName(), uri, pos.getLine(), pos.getCharacter());
+
+                if (!isValidIdentifier(newName)) {
+                    throw new IllegalArgumentException("Invalid identifier: " + newName);
                 }
 
                 // Capture old source range for the WorkspaceEdit before reload
@@ -178,7 +184,7 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 Range fullDocRange = new Range(new Position(0, 0), new Position(lastLine, lastChar));
 
                 // Apply rename (reloads affected classes internally)
-                String newSource = engine.applyRename(resolved.getNodeRef(), newName);
+                String newSource = engine.applyRename(target.getNodeRef(), target.getCodeRef(), newName);
 
                 // Persist rename immediately to sidecar state file.
                 manager.saveCurrentProjectStateUnsafe();
@@ -192,7 +198,8 @@ public class ReJadxTextDocumentService implements TextDocumentService {
 
                 return edit;
             } catch (Exception e) {
-                log.warn("rename failed for {}: {}", uri, e.getMessage());
+                log.warn("rename failed for {} (line={}, char={}, newName='{}'): {}",
+                        uri, pos.getLine(), pos.getCharacter(), newName, e.getMessage());
                 return new WorkspaceEdit();
             } finally {
                 wl.unlock();
@@ -235,5 +242,20 @@ public class ReJadxTextDocumentService implements TextDocumentService {
             if (source.charAt(i) == '\n') currentLine++;
         }
         return source.length();
+    }
+
+    private static boolean isValidIdentifier(String name) {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
+        if (!Character.isJavaIdentifierStart(name.charAt(0))) {
+            return false;
+        }
+        for (int i = 1; i < name.length(); i++) {
+            if (!Character.isJavaIdentifierPart(name.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

@@ -22,6 +22,7 @@ import jadx.api.ICodeInfo;
 import jadx.api.data.CommentStyle;
 import jadx.api.data.ICodeComment;
 import jadx.api.data.ICodeRename;
+import jadx.api.data.IJavaCodeRef;
 import jadx.api.data.IJavaNodeRef;
 import jadx.api.data.impl.JadxCodeRef;
 import jadx.api.data.impl.JadxCodeComment;
@@ -33,8 +34,11 @@ import jadx.api.metadata.ICodeMetadata;
 import jadx.api.metadata.ICodeNodeRef;
 import jadx.api.metadata.annotations.InsnCodeOffset;
 import jadx.api.metadata.annotations.NodeDeclareRef;
+import jadx.api.metadata.annotations.VarNode;
+import jadx.api.metadata.annotations.VarRef;
 
 import dev.rejadx.server.model.PackageNode;
+import dev.rejadx.server.model.RenameTarget;
 import dev.rejadx.server.model.ResolvedNode;
 import dev.rejadx.server.model.SourceType;
 import dev.rejadx.server.model.XrefLocation;
@@ -159,13 +163,63 @@ public class JadxAdapter implements IDecompilerEngine {
         return null; // variable or other non-renameable node
     }
 
+    @Override
+    public RenameTarget resolveRenameTargetAt(String rawClassName, int charOffset) throws ClassNotFoundException {
+        JavaClass cls = findClass(rawClassName);
+        ICodeInfo codeInfo = cls.getCodeInfo();
+        String source = codeInfo.getCodeStr();
+        ICodeMetadata md = codeInfo.getCodeMetadata();
+
+        int[] tokenRange = findIdentifierRange(source, charOffset);
+        String token = tokenRange == null ? "" : source.substring(tokenRange[0], tokenRange[1]);
+
+        if (tokenRange != null) {
+            // Try all positions inside identifier text first (most accurate).
+            for (int p = tokenRange[0]; p < tokenRange[1]; p++) {
+                RenameTarget byAnn = resolveRenameTargetFromAnnotation(codeInfo, md.getAt(p));
+                if (byAnn != null) {
+                    return byAnn;
+                }
+            }
+        }
+
+        // Variable rename target: method node + variable codeRef (GUI parity)
+        JavaNode nodeAtPos = jadx.getJavaNodeAtPosition(codeInfo, charOffset);
+        RenameTarget directTarget = toRenameTarget(nodeAtPos, token);
+        if (directTarget != null) {
+            return directTarget;
+        }
+
+        RenameTarget annTarget = resolveRenameTargetFromAnnotation(codeInfo, md.getAt(charOffset));
+        if (annTarget != null) {
+            return annTarget;
+        }
+
+        // If cursor is just after the symbol, try previous character too.
+        if (charOffset > 0) {
+            annTarget = resolveRenameTargetFromAnnotation(codeInfo, md.getAt(charOffset - 1));
+            if (annTarget != null) {
+                return annTarget;
+            }
+        }
+
+        // Last fallback: closest/enclosing node but only when it matches identifier token.
+        JavaNode best = resolveBestNodeAt(codeInfo, charOffset);
+        RenameTarget bestTarget = toRenameTarget(best, token);
+        if (bestTarget != null) {
+            return bestTarget;
+        }
+        return null;
+    }
+
     // --- Mutations ---
 
     @Override
-    public String applyRename(IJavaNodeRef nodeRef, String newName) throws Exception {
+    public String applyRename(IJavaNodeRef nodeRef, IJavaCodeRef codeRef, String newName) throws Exception {
         List<ICodeRename> renames = new ArrayList<>(liveCodeData.getRenames());
-        renames.removeIf(r -> r.getNodeRef().equals(nodeRef));
-        renames.add(new JadxCodeRename(nodeRef, newName));
+        renames.removeIf(r -> r.getNodeRef().equals(nodeRef)
+                && java.util.Objects.equals(r.getCodeRef(), codeRef));
+        renames.add(new JadxCodeRename(nodeRef, codeRef, newName));
         liveCodeData.setRenames(renames);
         jadx.getArgs().setCodeData(liveCodeData);
         jadx.reloadCodeData();
@@ -446,5 +500,104 @@ public class JadxAdapter implements IDecompilerEngine {
     private static int symbolLength(JavaNode node) {
         String name = node.getName();
         return name == null || name.isEmpty() ? 1 : name.length();
+    }
+
+    private static String safeName(String name) {
+        return name == null ? "" : name;
+    }
+
+    private RenameTarget resolveRenameTargetFromAnnotation(ICodeInfo codeInfo, ICodeAnnotation annAt) {
+        if (annAt instanceof NodeDeclareRef decl && decl.getNode() instanceof VarNode varNode) {
+            JavaNode varJavaNode = jadx.getJavaNodeByRef(varNode);
+            if (varJavaNode instanceof jadx.api.JavaVariable var) {
+                return new RenameTarget(
+                        JadxNodeRef.forMth(var.getMth()),
+                        JadxCodeRef.forVar(varNode.getReg(), varNode.getSsa()),
+                        safeName(varNode.getName()),
+                        "variable");
+            }
+            return null;
+        }
+        if (annAt instanceof VarRef varRef) {
+            ICodeAnnotation declAnn = codeInfo.getCodeMetadata().getAt(varRef.getRefPos());
+            if (declAnn instanceof NodeDeclareRef decl && decl.getNode() instanceof VarNode varNode) {
+                JavaNode varJavaNode = jadx.getJavaNodeByRef(varNode);
+                if (varJavaNode instanceof jadx.api.JavaVariable var) {
+                    return new RenameTarget(
+                            JadxNodeRef.forMth(var.getMth()),
+                            JadxCodeRef.forVar(var),
+                            safeName(var.getName()),
+                            "variable");
+                }
+            }
+            return null;
+        }
+
+        JavaNode node = jadx.getJavaNodeByCodeAnnotation(codeInfo, annAt);
+        return toRenameTarget(node, null);
+    }
+
+    private RenameTarget toRenameTarget(JavaNode node, String token) {
+        if (node == null) {
+            return null;
+        }
+        if (node instanceof jadx.api.JavaVariable var) {
+            return new RenameTarget(
+                    JadxNodeRef.forMth(var.getMth()),
+                    JadxCodeRef.forVar(var),
+                    safeName(var.getName()),
+                    "variable");
+        }
+
+        // Avoid broad/wrong rename when node doesn't match identifier under cursor.
+        if (token != null && !token.isEmpty()) {
+            String nodeName = safeName(node.getName());
+            boolean constructorNameMatch = node instanceof JavaMethod m && m.isConstructor()
+                    && token.equals(safeName(m.getDeclaringClass().getName()));
+            if (!token.equals(nodeName) && !constructorNameMatch) {
+                return null;
+            }
+        }
+
+        if (node instanceof JavaClass jcls) {
+            return new RenameTarget(JadxNodeRef.forCls(jcls), null, safeName(jcls.getName()), "class");
+        }
+        if (node instanceof JavaMethod jmth) {
+            return new RenameTarget(JadxNodeRef.forMth(jmth), null, safeName(jmth.getName()), "method");
+        }
+        if (node instanceof JavaField jfld) {
+            return new RenameTarget(JadxNodeRef.forFld(jfld), null, safeName(jfld.getName()), "field");
+        }
+        return null;
+    }
+
+    private static int[] findIdentifierRange(String source, int offset) {
+        if (source == null || source.isEmpty()) {
+            return null;
+        }
+        int len = source.length();
+        int pos = Math.max(0, Math.min(offset, len - 1));
+
+        if (!isIdentifierChar(source.charAt(pos))) {
+            if (pos > 0 && isIdentifierChar(source.charAt(pos - 1))) {
+                pos = pos - 1;
+            } else {
+                return null;
+            }
+        }
+
+        int start = pos;
+        while (start > 0 && isIdentifierChar(source.charAt(start - 1))) {
+            start--;
+        }
+        int end = pos + 1;
+        while (end < len && isIdentifierChar(source.charAt(end))) {
+            end++;
+        }
+        return new int[]{start, end};
+    }
+
+    private static boolean isIdentifierChar(char ch) {
+        return Character.isJavaIdentifierPart(ch) || ch == '$';
     }
 }

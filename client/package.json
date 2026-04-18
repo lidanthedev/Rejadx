@@ -44,6 +44,10 @@
       {
         "command": "rejadx.renameAtCursor",
         "title": "ReJadx: Rename Symbol"
+      },
+      {
+        "command": "rejadx.renameAtCursorDirect",
+        "title": "ReJadx: Rename Symbol (Direct)"
       }
     ],
     "keybindings": [
@@ -55,6 +59,11 @@
       {
         "command": "rejadx.renameAtCursor",
         "key": "f2",
+        "when": "editorTextFocus && resourceScheme == 'jadx'"
+      },
+      {
+        "command": "rejadx.renameAtCursorDirect",
+        "key": "ctrl+f2",
         "when": "editorTextFocus && resourceScheme == 'jadx'"
       }
     ]
