@@ -48,7 +48,6 @@ import jadx.api.usage.impl.EmptyUsageInfoCache;
 import jadx.api.usage.impl.InMemoryUsageInfoCache;
 import jadx.cli.JadxAppCommon;
 import jadx.cli.plugins.JadxFilesGetter;
-import jadx.plugins.tools.JadxExternalPluginsLoader;
 
 import dev.rejadx.server.model.PackageNode;
 import dev.rejadx.server.model.CommentInfo;
@@ -58,6 +57,7 @@ import dev.rejadx.server.model.SourceType;
 import dev.rejadx.server.model.XrefLocation;
 import dev.rejadx.server.uri.JadxUriParser;
 import dev.rejadx.server.decompiler.cache.HybridCodeCache;
+import dev.rejadx.server.decompiler.plugins.SafeExternalPluginsLoader;
 
 public class JadxAdapter implements IDecompilerEngine {
 
@@ -105,7 +105,7 @@ public class JadxAdapter implements IDecompilerEngine {
         }
 
         if (enableExternalPlugins) {
-            args.setPluginLoader(new JadxExternalPluginsLoader());
+            args.setPluginLoader(new SafeExternalPluginsLoader());
             args.setFilesGetter(JadxFilesGetter.INSTANCE);
             JadxAppCommon.applyEnvVars(args);
         }
