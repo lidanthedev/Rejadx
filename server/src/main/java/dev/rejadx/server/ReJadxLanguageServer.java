@@ -28,6 +28,7 @@ public class ReJadxLanguageServer implements LanguageServer, LanguageClientAware
             "rejadx.getPackages",
             "rejadx.getSource",
             "rejadx.addComment",
+            "rejadx.exportMappings",
             "rejadx.saveProject"
     );
 
@@ -91,6 +92,11 @@ public class ReJadxLanguageServer implements LanguageServer, LanguageClientAware
     @JsonRequest("jadx/addComment")
     public CompletableFuture<Object> addComment(Map<String, Object> params) {
         return workspaceService.addCommentRequest(params);
+    }
+
+    @JsonRequest("jadx/exportMappings")
+    public CompletableFuture<Object> exportMappings(Map<String, Object> params) {
+        return workspaceService.exportMappingsRequest(params);
     }
 
     @Override

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs/promises';
 import { startLanguageClient, stopLanguageClient, getClient } from './languageClient';
 import { DashboardProvider, TelemetryUpdate } from './views/DashboardProvider';
 import { ClassTreeProvider, PackageNode } from './views/ClassTreeProvider';
@@ -13,6 +14,10 @@ interface LspWorkspaceEdit {
   changes?: Record<string, unknown[]>;
 }
 
+interface ExportMappingsResult {
+  mapping: string;
+}
+
 interface CommentLookupResult {
   exists: boolean;
   comment: string;
@@ -21,7 +26,7 @@ interface CommentLookupResult {
 
 function languageIdForJadxUri(uri: vscode.Uri): string {
   const q = uri.query || '';
-  return q.includes('type=smali') ? 'plaintext' : 'java';
+  return q.includes('type=smali') ? 'smali' : 'java';
 }
 
 async function ensureJadxDocumentLanguage(doc: vscode.TextDocument): Promise<void> {
@@ -137,7 +142,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const uri = vscode.Uri.parse(params.uri);
         const openDoc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
         if (openDoc) {
-          const desired = params.languageId === 'smali' ? 'plaintext' : 'java';
+          const desired = params.languageId === 'smali' ? 'smali' : 'java';
           if (openDoc.languageId !== desired) {
             void vscode.languages.setTextDocumentLanguage(openDoc, desired).then(() => undefined, () => undefined);
           }
@@ -329,6 +334,49 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       contentProvider.invalidate(uriKey);
     } catch (err) {
       vscode.window.showErrorMessage(`ReJadx: rename failed: ${err}`);
+    }
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('jadx.openSideBySide', async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.uri.scheme !== 'jadx') {
+      return;
+    }
+
+    const current = editor.document.uri;
+    const query = current.query || '';
+    const isSmali = query.includes('type=smali');
+    const nextQuery = isSmali
+      ? query.replace('type=smali', 'type=java')
+      : query.includes('type=java')
+        ? query.replace('type=java', 'type=smali')
+        : (query ? `${query}&type=smali` : 'type=smali');
+
+    const opposite = current.with({ query: nextQuery });
+    await vscode.commands.executeCommand('vscode.open', opposite, vscode.ViewColumn.Beside);
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('jadx.exportProGuard', async () => {
+    const readyClient = getClient() ?? await ensureClientStarted();
+
+    try {
+      const res = await readyClient.sendRequest('jadx/exportMappings', {}) as ExportMappingsResult;
+      const mapping = res?.mapping ?? '';
+
+      const target = await vscode.window.showSaveDialog({
+        title: 'Export ProGuard Mapping',
+        saveLabel: 'Export',
+        filters: { 'Text Files': ['txt'], 'All Files': ['*'] },
+        defaultUri: vscode.Uri.file('mapping.txt')
+      });
+      if (!target) {
+        return;
+      }
+
+      await fs.writeFile(target.fsPath, mapping, 'utf8');
+      vscode.window.showInformationMessage(`ReJadx: ProGuard mapping exported to ${target.fsPath}`);
+    } catch (err) {
+      vscode.window.showErrorMessage(`ReJadx: export mappings failed: ${err}`);
     }
   }));
 }

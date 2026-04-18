@@ -13,6 +13,7 @@ import org.eclipse.lsp4j.services.WorkspaceService;
 
 import dev.rejadx.server.client.ReJadxClient;
 import dev.rejadx.server.commands.AddCommentCommand;
+import dev.rejadx.server.commands.ExportMappingsCommand;
 import dev.rejadx.server.commands.GetCommentCommand;
 import dev.rejadx.server.commands.GetPackagesCommand;
 import dev.rejadx.server.commands.GetSourceCommand;
@@ -30,6 +31,7 @@ public class ReJadxWorkspaceService implements WorkspaceService {
         commands.put("rejadx.getSource",    new GetSourceCommand(manager)::execute);
         commands.put("rejadx.getComment",   new GetCommentCommand(manager)::execute);
         commands.put("rejadx.addComment",   new AddCommentCommand(manager)::execute);
+        commands.put("rejadx.exportMappings", new ExportMappingsCommand(manager)::execute);
         commands.put("rejadx.saveProject",  new SaveProjectCommand(manager)::execute);
     }
 
@@ -56,6 +58,14 @@ public class ReJadxWorkspaceService implements WorkspaceService {
             return CompletableFuture.failedFuture(new IllegalArgumentException("jadx/addComment requires params"));
         }
         return handler.apply(List.of(params));
+    }
+
+    public CompletableFuture<Object> exportMappingsRequest(Map<String, Object> params) {
+        var handler = commands.get("rejadx.exportMappings");
+        if (handler == null) {
+            return CompletableFuture.failedFuture(new IllegalStateException("Export mappings command is not registered"));
+        }
+        return handler.apply(List.of(params == null ? Map.of() : params));
     }
 
     @Override

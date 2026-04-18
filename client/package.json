@@ -12,6 +12,17 @@
       {
         "id": "java",
         "extensions": [".java"]
+      },
+      {
+        "id": "smali",
+        "extensions": [".smali"]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "smali",
+        "scopeName": "source.smali",
+        "path": "./syntaxes/smali.tmlanguage"
       }
     ],
     "viewsContainers": {
@@ -44,6 +55,14 @@
       {
         "command": "rejadx.renameAtCursor",
         "title": "ReJadx: Rename Symbol"
+      },
+      {
+        "command": "jadx.openSideBySide",
+        "title": "Jadx: Open Java & Smali Side-by-Side"
+      },
+      {
+        "command": "jadx.exportProGuard",
+        "title": "Jadx: Export ProGuard Mappings"
       }
     ],
     "keybindings": [
