@@ -45,13 +45,17 @@ export async function startLanguageClient(context: vscode.ExtensionContext): Pro
 export interface ReJadxClientSettings {
   searchMaxResults: number;
   customJadxArgs: string;
+  enableExternalPlugins: boolean;
+  enableCodeCache: boolean;
 }
 
 export function getReJadxSettings(): ReJadxClientSettings {
   const cfg = vscode.workspace.getConfiguration('rejadx');
   const searchMaxResults = cfg.get<number>('search.maxResults', 50);
   const customJadxArgs = cfg.get<string>('customJadxArgs', '');
-  return { searchMaxResults, customJadxArgs };
+  const enableExternalPlugins = cfg.get<boolean>('enableExternalPlugins', false);
+  const enableCodeCache = cfg.get<boolean>('enableCodeCache', true);
+  return { searchMaxResults, customJadxArgs, enableExternalPlugins, enableCodeCache };
 }
 
 export async function stopLanguageClient(): Promise<void> {

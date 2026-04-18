@@ -5,6 +5,8 @@ rootProject.name = "rejadx-server"
 includeBuild("../third_party/jadx") {
     dependencySubstitution {
         substitute(module("io.github.skylot:jadx-core")).using(project(":jadx-core"))
+        substitute(module("io.github.skylot:jadx-cli")).using(project(":jadx-cli"))
+        substitute(module("io.github.skylot:jadx-plugins-tools")).using(project(":jadx-plugins-tools"))
         substitute(module("io.github.skylot:jadx-dex-input")).using(project(":jadx-plugins:jadx-dex-input"))
         substitute(module("io.github.skylot:jadx-java-input")).using(project(":jadx-plugins:jadx-java-input"))
         substitute(module("io.github.skylot:jadx-java-convert")).using(project(":jadx-plugins:jadx-java-convert"))

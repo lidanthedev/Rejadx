@@ -23,10 +23,14 @@ public class SetSettingsCommand {
                 : new Params();
 
         manager.getSettings().setCustomArgs(p.customArgs);
+        manager.getSettings().setEnableExternalPlugins(p.enableExternalPlugins);
+        manager.getSettings().setEnableCodeCache(p.enableCodeCache);
         return CompletableFuture.completedFuture(Map.of("applied", true));
     }
 
     private static class Params {
         String customArgs = "";
+        boolean enableExternalPlugins = false;
+        boolean enableCodeCache = true;
     }
 }

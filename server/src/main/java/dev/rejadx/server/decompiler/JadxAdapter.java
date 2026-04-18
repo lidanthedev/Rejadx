@@ -34,6 +34,7 @@ import jadx.api.data.impl.JadxCodeData;
 import jadx.api.data.impl.JadxCodeRename;
 import jadx.api.data.impl.JadxNodeRef;
 import jadx.api.args.IntegerFormat;
+import jadx.api.impl.InMemoryCodeCache;
 import jadx.api.metadata.ICodeAnnotation;
 import jadx.api.metadata.ICodeMetadata;
 import jadx.api.metadata.ICodeNodeRef;
@@ -43,6 +44,11 @@ import jadx.api.metadata.annotations.VarNode;
 import jadx.api.metadata.annotations.VarRef;
 import jadx.api.CommentsLevel;
 import jadx.api.DecompilationMode;
+import jadx.api.usage.impl.EmptyUsageInfoCache;
+import jadx.api.usage.impl.InMemoryUsageInfoCache;
+import jadx.cli.JadxAppCommon;
+import jadx.cli.plugins.JadxFilesGetter;
+import jadx.plugins.tools.JadxExternalPluginsLoader;
 
 import dev.rejadx.server.model.PackageNode;
 import dev.rejadx.server.model.CommentInfo;
@@ -51,6 +57,7 @@ import dev.rejadx.server.model.ResolvedNode;
 import dev.rejadx.server.model.SourceType;
 import dev.rejadx.server.model.XrefLocation;
 import dev.rejadx.server.uri.JadxUriParser;
+import dev.rejadx.server.decompiler.cache.HybridCodeCache;
 
 public class JadxAdapter implements IDecompilerEngine {
 
@@ -60,9 +67,19 @@ public class JadxAdapter implements IDecompilerEngine {
     private JadxDecompiler jadx;
     private JadxCodeData liveCodeData;
     private String customArgs = "";
+    private boolean enableExternalPlugins;
+    private boolean enableCodeCache = true;
 
     public void setCustomArgs(String customArgs) {
         this.customArgs = customArgs == null ? "" : customArgs;
+    }
+
+    public void setEnableExternalPlugins(boolean enableExternalPlugins) {
+        this.enableExternalPlugins = enableExternalPlugins;
+    }
+
+    public void setEnableCodeCache(boolean enableCodeCache) {
+        this.enableCodeCache = enableCodeCache;
     }
 
     @Override
@@ -77,6 +94,21 @@ public class JadxAdapter implements IDecompilerEngine {
         args.setOutDirSrc(cacheDir.resolve("src").toFile());
         args.setOutDirRes(cacheDir.resolve("res").toFile());
         args.setCodeData(liveCodeData);
+
+        if (enableCodeCache) {
+            Path cacheRoot = cacheDir.resolve("code-cache");
+            args.setCodeCache(new HybridCodeCache(new InMemoryCodeCache(), cacheRoot));
+            args.setUsageInfoCache(new InMemoryUsageInfoCache());
+        } else {
+            args.setCodeCache(new InMemoryCodeCache());
+            args.setUsageInfoCache(new EmptyUsageInfoCache());
+        }
+
+        if (enableExternalPlugins) {
+            args.setPluginLoader(new JadxExternalPluginsLoader());
+            args.setFilesGetter(JadxFilesGetter.INSTANCE);
+            JadxAppCommon.applyEnvVars(args);
+        }
 
         applyCustomArgs(args);
 

@@ -22,6 +22,16 @@
           "type": "string",
           "default": "",
           "description": "Custom Jadx CLI-style arguments passed to ReJadx server on project load (for example: --threads-count=4 --decompilation-mode=simple). Restart server to apply changes."
+        },
+        "rejadx.enableExternalPlugins": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow loading external Jadx plugins (installed outside bundled plugins)."
+        },
+        "rejadx.enableCodeCache": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable hybrid cache (in-memory + disk-backed code strings). If disabled, uses in-memory code cache only."
         }
       }
     },

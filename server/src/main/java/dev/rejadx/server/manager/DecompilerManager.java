@@ -100,6 +100,8 @@ public class DecompilerManager {
             setStatus("loading");
             JadxAdapter newEngine = new JadxAdapter();
             newEngine.setCustomArgs(settings.getCustomArgs());
+            newEngine.setEnableExternalPlugins(settings.isEnableExternalPlugins());
+            newEngine.setEnableCodeCache(settings.isEnableCodeCache());
             try {
                 setStatus("decompiling");
                 newEngine.load(inputFile, cacheDir, existingData);

@@ -382,7 +382,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const settings = getReJadxSettings();
       await lc.sendRequest('workspace/executeCommand', {
         command: 'rejadx.setSettings',
-        arguments: [{ customArgs: settings.customJadxArgs ?? '' }]
+        arguments: [{
+          customArgs: settings.customJadxArgs ?? '',
+          enableExternalPlugins: settings.enableExternalPlugins,
+          enableCodeCache: settings.enableCodeCache
+        }]
       }) as ServerSettingsResult;
 
       const result = await lc.sendRequest('workspace/executeCommand', {
@@ -429,7 +433,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const settings = getReJadxSettings();
         await lc.sendRequest('workspace/executeCommand', {
           command: 'rejadx.setSettings',
-          arguments: [{ customArgs: settings.customJadxArgs ?? '' }]
+          arguments: [{
+            customArgs: settings.customJadxArgs ?? '',
+            enableExternalPlugins: settings.enableExternalPlugins,
+            enableCodeCache: settings.enableCodeCache
+          }]
         }) as ServerSettingsResult;
 
         const result = await lc.sendRequest('workspace/executeCommand', {
