@@ -6,3 +6,15 @@ src/**
 .gitignore
 tsconfig.json
 webpack.config.js
+*.tsbuildinfo
+**/*.map
+
+# Do not package repository sources in the extension payload.
+../server/**
+../third_party/**
+
+# Keep bundled runtime assets.
+!bin/**
+!bin/jadx-server.jar
+!syntaxes/**
+!media/**

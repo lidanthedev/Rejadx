@@ -1,7 +1,13 @@
 {
   "name": "rejadx",
   "displayName": "ReJadx",
+  "publisher": "lidanthedev",
   "description": "Android reverse engineering powered by jadx",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lidanthedev/Rejadx.git"
+  },
+  "icon": "media/icon.png",
   "version": "0.0.1",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other"],
@@ -127,10 +133,14 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run package",
+    "vscode:prepublish": "npm run prepare:serverJar && npm run package",
     "compile": "webpack",
     "watch": "webpack --watch",
     "package": "webpack --mode production --devtool hidden-source-map",
+    "build:serverJar": "../server/gradlew -p ../server shadowJar",
+    "bundle:serverJar": "node -e \"const fs=require('fs');fs.mkdirSync('bin',{recursive:true});fs.copyFileSync('../server/build/libs/rejadx-server-all.jar','bin/jadx-server.jar');\"",
+    "prepare:serverJar": "npm run build:serverJar && npm run bundle:serverJar",
+    "vsix": "npx @vscode/vsce package",
     "compile-tests": "tsc -p . --outDir out",
     "lint": "eslint src"
   },
