@@ -2,6 +2,7 @@ package dev.rejadx.server.manager;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
@@ -10,6 +11,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import jadx.api.data.impl.JadxCodeData;
 
 import dev.rejadx.server.client.ReJadxClient;
+import dev.rejadx.server.config.ServerSettings;
 import dev.rejadx.server.decompiler.IDecompilerEngine;
 import dev.rejadx.server.decompiler.JadxAdapter;
 import dev.rejadx.server.model.TelemetryParams;
@@ -44,6 +47,7 @@ public class DecompilerManager {
 
     private volatile IDecompilerEngine engine;
     private volatile ReJadxClient client;
+    private final ServerSettings settings = new ServerSettings();
     private volatile Path currentInputFile;
     private volatile Path currentCacheDir;
     private volatile String status = "idle";
@@ -63,6 +67,10 @@ public class DecompilerManager {
 
     public Path getCurrentInputFile() {
         return currentInputFile;
+    }
+
+    public ServerSettings getSettings() {
+        return settings;
     }
 
     public void connect(ReJadxClient client) {
@@ -93,6 +101,9 @@ public class DecompilerManager {
             // Phase 1: build new engine outside any lock (this is the slow path)
             setStatus("loading");
             JadxAdapter newEngine = new JadxAdapter();
+            newEngine.setCustomArgs(settings.getCustomArgs());
+            newEngine.setEnableExternalPlugins(settings.isEnableExternalPlugins());
+            newEngine.setEnableCodeCache(settings.isEnableCodeCache());
             try {
                 setStatus("decompiling");
                 newEngine.load(inputFile, cacheDir, existingData);
@@ -131,6 +142,88 @@ public class DecompilerManager {
         }
     }
 
+    /**
+     * Saves state to the default sidecar next to the current input file.
+     * Caller must hold the manager lock (read or write).
+     */
+    public void saveCurrentProjectStateUnsafe() throws Exception {
+        if (lock.getReadHoldCount() + lock.getWriteHoldCount() == 0) {
+            throw new IllegalStateException("saveCurrentProjectStateUnsafe requires manager lock");
+        }
+        if (engine == null) throw new IllegalStateException("No project loaded");
+        if (currentInputFile == null) throw new IllegalStateException("No input file loaded");
+        Path stateFile = ProjectStateStore.defaultStateFile(currentInputFile);
+        ProjectStateStore.save(stateFile, currentInputFile, engine.getCodeData());
+    }
+
+    /** Closes current project and releases decompiler resources. */
+    public void closeProject() {
+        lock.writeLock().lock();
+        try {
+            if (engine != null) {
+                try {
+                    engine.close();
+                } catch (Exception e) {
+                    log.warn("Failed to close engine: {}", e.getMessage());
+                }
+                engine = null;
+            }
+            currentInputFile = null;
+            currentCacheDir = null;
+            setStatus("idle");
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public CompletableFuture<Object> resetCodeCache() {
+        final Path inputFile;
+        final Path cacheDir;
+
+        lock.writeLock().lock();
+        try {
+            if (currentInputFile == null || currentCacheDir == null || engine == null) {
+                return CompletableFuture.completedFuture(Map.of(
+                        "reset", false,
+                        "error", "No project loaded"));
+            }
+
+            try {
+                saveCurrentProjectStateUnsafe();
+            } catch (Exception e) {
+                log.warn("Failed to persist project state before cache reset: {}", e.getMessage());
+            }
+
+            inputFile = currentInputFile;
+            cacheDir = currentCacheDir;
+        } finally {
+            lock.writeLock().unlock();
+        }
+
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                clearDirectory(cacheDir);
+            } catch (Exception e) {
+                log.warn("Failed to clear cache directory {}: {}", cacheDir, e.getMessage());
+            }
+            return true;
+        }, workPool).thenCompose(ignored -> loadProject(inputFile)).thenApply(loadResult -> {
+            Map<String, Object> out = new HashMap<>();
+            out.put("reset", true);
+            out.put("cacheDir", cacheDir.toString());
+            if (loadResult instanceof Map<?, ?> loadedMap) {
+                loadedMap.forEach((k, v) -> {
+                    if (k instanceof String key) {
+                        out.put(key, v);
+                    }
+                });
+            } else {
+                out.put("loaded", true);
+            }
+            return (Object) out;
+        });
+    }
+
     public void shutdown() {
         if (telemetryFuture != null) telemetryFuture.cancel(false);
         telemetryScheduler.shutdown();
@@ -148,6 +241,26 @@ public class DecompilerManager {
 
     private void setStatus(String s) {
         status = s;
+    }
+
+    private void clearDirectory(Path dir) {
+        if (dir == null || !Files.exists(dir)) {
+            return;
+        }
+        try (Stream<Path> stream = Files.walk(dir)) {
+            stream.sorted((a, b) -> b.getNameCount() - a.getNameCount())
+                    .forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to delete " + path + ": " + e.getMessage(), e);
+                        }
+                    });
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to reset cache directory: " + dir, e);
+        }
     }
 
     private void pushTelemetry() {

@@ -330,3 +330,4 @@ gradle-app.setting
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,web,java,kotlin,jetbrains+all,node,gradle
 .claude/
+.settings/

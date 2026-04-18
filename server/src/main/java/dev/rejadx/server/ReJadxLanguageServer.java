@@ -1,16 +1,17 @@
 package dev.rejadx.server;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import org.eclipse.lsp4j.ExecuteCommandOptions;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.InitializedParams;
-import org.eclipse.lsp4j.RenameOptions;
 import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.SetTraceParams;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
+import org.eclipse.lsp4j.jsonrpc.services.JsonRequest;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.LanguageClientAware;
 import org.eclipse.lsp4j.services.LanguageServer;
@@ -26,8 +27,13 @@ public class ReJadxLanguageServer implements LanguageServer, LanguageClientAware
             "rejadx.loadProject",
             "rejadx.getPackages",
             "rejadx.getSource",
+            "rejadx.searchCode",
+            "rejadx.setSettings",
             "rejadx.addComment",
-            "rejadx.saveProject"
+            "rejadx.exportMappings",
+            "rejadx.closeProject",
+            "rejadx.saveProject",
+            "rejadx.resetCodeCache"
     );
 
     private final DecompilerManager manager = new DecompilerManager();
@@ -52,7 +58,8 @@ public class ReJadxLanguageServer implements LanguageServer, LanguageClientAware
 
         // Standard LSP features routed through jadx-core
         caps.setReferencesProvider(true);
-        caps.setRenameProvider(new RenameOptions(false));
+        caps.setDefinitionProvider(true);
+        caps.setRenameProvider(true);
 
         // Custom commands dispatched via workspace/executeCommand
         caps.setExecuteCommandProvider(new ExecuteCommandOptions(COMMANDS));
@@ -84,6 +91,16 @@ public class ReJadxLanguageServer implements LanguageServer, LanguageClientAware
     @Override
     public WorkspaceService getWorkspaceService() {
         return workspaceService;
+    }
+
+    @JsonRequest("jadx/addComment")
+    public CompletableFuture<Object> addComment(Map<String, Object> params) {
+        return workspaceService.addCommentRequest(params);
+    }
+
+    @JsonRequest("jadx/exportMappings")
+    public CompletableFuture<Object> exportMappings(Map<String, Object> params) {
+        return workspaceService.exportMappingsRequest(params);
     }
 
     @Override

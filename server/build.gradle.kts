@@ -29,6 +29,8 @@ dependencies {
     // jadx-core is supplied via the composite build substitution in settings.gradle.kts.
     // The Maven coordinate is transparently replaced with the :jadx-core source project.
     implementation("io.github.skylot:jadx-core")
+    implementation("io.github.skylot:jadx-cli")
+    implementation("io.github.skylot:jadx-plugins-tools")
 
     // Input + analysis plugins are loaded via ServiceLoader at runtime.
     // Without these on runtimeClasspath, APK loading can appear to work but only
