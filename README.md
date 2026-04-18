@@ -11,6 +11,11 @@ It provides jadx-style workflows inside VS Code, including:
 - Decompiled code search and mappings export
 - Dashboard controls for open/restart/stop and runtime telemetry
 
+## Screenshots
+<img width="1852" height="978" alt="image" src="https://github.com/user-attachments/assets/f088ace7-9b67-4396-8d6b-107235cac312" />
+<img width="1454" height="334" alt="image" src="https://github.com/user-attachments/assets/62db1b62-e51d-460e-bdfa-4f933695498b" />
+
+
 ## Repository Layout
 
 - `client/` — VS Code extension (TypeScript)
