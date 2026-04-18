@@ -20,6 +20,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
   private _onBrowseFn: (() => Promise<void>) | undefined;
   private _onRestartProjectFn: (() => Promise<void>) | undefined;
   private _onStopProjectFn: (() => Promise<void>) | undefined;
+  private _onViewReadyFn: (() => void) | undefined;
   private _state: {
     phase: 'init' | 'loading' | 'loaded';
     apkPath: string;
@@ -50,6 +51,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     webviewView.webview.html = this._buildHtml(webviewView.webview);
 
     this._pushState();
+    this._onViewReadyFn?.();
 
     webviewView.webview.onDidReceiveMessage(async (msg: { command: string; apkPath?: string }) => {
       if (msg.command === 'openApk' && msg.apkPath) {
@@ -63,6 +65,13 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       }
     });
 
+    webviewView.onDidChangeVisibility(() => {
+      if (webviewView.visible) {
+        this._pushState();
+        this._onViewReadyFn?.();
+      }
+    });
+
     webviewView.onDidDispose(() => { this._view = undefined; });
   }
 
@@ -70,6 +79,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
   setBrowseHandler(fn: () => Promise<void>): void { this._onBrowseFn = fn; }
   setRestartProjectHandler(fn: () => Promise<void>): void { this._onRestartProjectFn = fn; }
   setStopProjectHandler(fn: () => Promise<void>): void { this._onStopProjectFn = fn; }
+  setViewReadyHandler(fn: () => void): void { this._onViewReadyFn = fn; }
 
   setRecentProjects(projects: string[]): void {
     this._state.recentProjects = [...projects];

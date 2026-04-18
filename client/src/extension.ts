@@ -133,7 +133,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   let clientHooksInstalled = false;
   let lastLoadedApkPath: string | undefined;
+  let dashboardInitialized = false;
   let ensureClientStarted: () => Promise<NonNullable<ReturnType<typeof getClient>>>;
+  let initDashboardState: () => Promise<void>;
 
   const contentProvider = new JadxContentProvider();
   // Register BEFORE starting LSP to avoid a race on the first sourceReady notification.
@@ -241,7 +243,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     await saveRecentProjects(current.slice(0, MAX_RECENT_PROJECTS));
   };
 
-  dashboardProvider.setRecentProjects(getRecentProjects());
+  initDashboardState = async (): Promise<void> => {
+    dashboardProvider.setRecentProjects(getRecentProjects());
+    if (lastLoadedApkPath) {
+      dashboardProvider.setApkPath(lastLoadedApkPath);
+    }
+  };
+
+  dashboardProvider.setViewReadyHandler(() => {
+    if (dashboardInitialized) {
+      void initDashboardState();
+      return;
+    }
+    dashboardInitialized = true;
+    void initDashboardState();
+  });
 
   ensureClientStarted = async (): Promise<NonNullable<ReturnType<typeof getClient>>> => {
     if (!getClient()) {
@@ -625,16 +641,36 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           vscode.Uri.parse(h.uri),
           new vscode.Range(h.line, h.character, h.line, h.character + Math.max(1, h.length))
         ));
-        // It will go to the first result, but also show the peek view with all results to choose from.
-        for (let i = 0; i < 2; i++) {
-            await vscode.commands.executeCommand(
-            'editor.action.showReferences',
-            locations[0].uri,
-            locations[0].range.start,
-            locations
-            );
-            await new Promise(resolve => setTimeout(resolve, 100));
+
+        let anchorUri: vscode.Uri;
+        let anchorPos: vscode.Position;
+
+        const active = vscode.window.activeTextEditor;
+        if (active) {
+          anchorUri = active.document.uri;
+          anchorPos = active.selection.active;
+        } else {
+          const tempUri = vscode.Uri.parse('jadx:///__references_anchor__/SearchAnchor.java?type=java');
+          contentProvider.update(tempUri.toString(), '');
+          await vscode.commands.executeCommand('vscode.open', tempUri, { preview: false });
+          await new Promise(resolve => setTimeout(resolve, 250));
+
+          const now = vscode.window.activeTextEditor;
+          if (now) {
+            anchorUri = now.document.uri;
+            anchorPos = now.selection.active;
+          } else {
+            anchorUri = tempUri;
+            anchorPos = new vscode.Position(0, 0);
+          }
         }
+
+        await vscode.commands.executeCommand(
+          'editor.action.showReferences',
+          anchorUri,
+          anchorPos,
+          locations
+        );
 
         if (hits.length >= maxResults) {
           vscode.window.showInformationMessage(`ReJadx: showing first ${maxResults} matches for "${query}".`);
