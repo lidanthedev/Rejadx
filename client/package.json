@@ -1,13 +1,63 @@
 {
   "name": "rejadx",
   "displayName": "ReJadx",
+  "publisher": "lidanthedev",
   "description": "Android reverse engineering powered by jadx",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lidanthedev/Rejadx.git"
+  },
+  "icon": "media/icon.png",
   "version": "0.0.1",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Other"],
   "activationEvents": ["onStartupFinished"],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "ReJadx",
+      "properties": {
+        "rejadx.search.maxResults": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 5000,
+          "description": "Maximum number of matches returned by ReJadx code search."
+        },
+        "rejadx.customJadxArgs": {
+          "type": "string",
+          "default": "",
+          "description": "Custom Jadx CLI-style arguments passed to ReJadx server on project load (for example: --threads-count=4 --decompilation-mode=simple). Restart server to apply changes."
+        },
+        "rejadx.enableExternalPlugins": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow loading external Jadx plugins (installed outside bundled plugins)."
+        },
+        "rejadx.enableCodeCache": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable hybrid cache (in-memory + disk-backed code strings). If disabled, uses in-memory code cache only."
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "java",
+        "extensions": [".java"]
+      },
+      {
+        "id": "smali",
+        "extensions": [".smali"]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "smali",
+        "scopeName": "source.smali",
+        "path": "./syntaxes/smali.tmlanguage"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -30,13 +80,67 @@
         }
       ]
     },
-    "commands": []
+    "commands": [
+      {
+        "command": "jadx.addComment",
+        "title": "ReJadx: Add Comment"
+      },
+      {
+        "command": "rejadx.renameAtCursor",
+        "title": "ReJadx: Rename Symbol"
+      },
+      {
+        "command": "jadx.openSideBySide",
+        "title": "ReJadx: Open Java & Smali Side-by-Side"
+      },
+      {
+        "command": "jadx.exportProGuard",
+        "title": "ReJadx: Export ProGuard Mappings"
+      },
+      {
+        "command": "jadx.searchCode",
+        "title": "ReJadx: Search in Decompiled Code"
+      },
+      {
+        "command": "rejadx.openVirtualFile",
+        "title": "ReJadx: Open Virtual File"
+      },
+      {
+        "command": "rejadx.reopenJavaFile",
+        "title": "ReJadx: Reopen Java File"
+      },
+      {
+        "command": "rejadx.resetProjectCodeCache",
+        "title": "ReJadx: Reset Code Cache"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "jadx.addComment",
+        "key": "ctrl+shift+c",
+        "when": "editorTextFocus && resourceScheme == 'jadx'"
+      },
+      {
+        "command": "rejadx.renameAtCursor",
+        "key": "f2",
+        "when": "editorTextFocus && resourceScheme == 'jadx'"
+      },
+      {
+        "command": "jadx.searchCode",
+        "key": "ctrl+shift+f",
+        "when": "resourceScheme == 'jadx'"
+      }
+    ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run package",
+    "vscode:prepublish": "npm run prepare:serverJar && npm run package",
     "compile": "webpack",
     "watch": "webpack --watch",
     "package": "webpack --mode production --devtool hidden-source-map",
+    "build:serverJar": "../server/gradlew -p ../server shadowJar",
+    "bundle:serverJar": "node -e \"const fs=require('fs');fs.mkdirSync('bin',{recursive:true});fs.copyFileSync('../server/build/libs/rejadx-server-all.jar','bin/jadx-server.jar');\"",
+    "prepare:serverJar": "npm run build:serverJar && npm run bundle:serverJar",
+    "vsix": "npx @vscode/vsce package",
     "compile-tests": "tsc -p . --outDir out",
     "lint": "eslint src"
   },

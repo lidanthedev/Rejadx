@@ -12,6 +12,23 @@
       "problemMatcher": []
     },
     {
+      "type": "shell",
+      "command": "mkdir -p \"${workspaceFolder}/client/bin\" && cp \"${workspaceFolder}/server/build/libs/rejadx-server-all.jar\" \"${workspaceFolder}/client/bin/jadx-server.jar\"",
+      "label": "bundle: server jar -> client/bin",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "prepare: server jar",
+      "dependsOn": [
+        "gradle: shadowJar - server",
+        "bundle: server jar -> client/bin"
+      ],
+      "dependsOrder": "sequence",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
       "type": "npm",
       "script": "compile",
       "path": "client/",
@@ -23,7 +40,7 @@
     {
       "label": "build: server + client",
       "dependsOn": [
-        "gradle: shadowJar - server",
+        "prepare: server jar",
         "npm: compile - client"
       ],
       "dependsOrder": "parallel",

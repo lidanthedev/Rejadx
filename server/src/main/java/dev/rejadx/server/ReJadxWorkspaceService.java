@@ -13,10 +13,16 @@ import org.eclipse.lsp4j.services.WorkspaceService;
 
 import dev.rejadx.server.client.ReJadxClient;
 import dev.rejadx.server.commands.AddCommentCommand;
+import dev.rejadx.server.commands.CloseProjectCommand;
+import dev.rejadx.server.commands.ExportMappingsCommand;
+import dev.rejadx.server.commands.GetCommentCommand;
 import dev.rejadx.server.commands.GetPackagesCommand;
 import dev.rejadx.server.commands.GetSourceCommand;
 import dev.rejadx.server.commands.LoadProjectCommand;
+import dev.rejadx.server.commands.ResetCodeCacheCommand;
 import dev.rejadx.server.commands.SaveProjectCommand;
+import dev.rejadx.server.commands.SearchCodeCommand;
+import dev.rejadx.server.commands.SetSettingsCommand;
 import dev.rejadx.server.manager.DecompilerManager;
 
 public class ReJadxWorkspaceService implements WorkspaceService {
@@ -27,8 +33,14 @@ public class ReJadxWorkspaceService implements WorkspaceService {
         commands.put("rejadx.loadProject",  new LoadProjectCommand(manager)::execute);
         commands.put("rejadx.getPackages",  new GetPackagesCommand(manager)::execute);
         commands.put("rejadx.getSource",    new GetSourceCommand(manager)::execute);
+        commands.put("rejadx.searchCode",   new SearchCodeCommand(manager)::execute);
+        commands.put("rejadx.setSettings",  new SetSettingsCommand(manager)::execute);
+        commands.put("rejadx.getComment",   new GetCommentCommand(manager)::execute);
         commands.put("rejadx.addComment",   new AddCommentCommand(manager)::execute);
+        commands.put("rejadx.exportMappings", new ExportMappingsCommand(manager)::execute);
+        commands.put("rejadx.closeProject", new CloseProjectCommand(manager)::execute);
         commands.put("rejadx.saveProject",  new SaveProjectCommand(manager)::execute);
+        commands.put("rejadx.resetCodeCache", new ResetCodeCacheCommand(manager)::execute);
     }
 
     public void setClient(ReJadxClient client) {
@@ -43,6 +55,25 @@ public class ReJadxWorkspaceService implements WorkspaceService {
                     new IllegalArgumentException("Unknown command: " + params.getCommand()));
         }
         return handler.apply(params.getArguments());
+    }
+
+    public CompletableFuture<Object> addCommentRequest(Map<String, Object> params) {
+        var handler = commands.get("rejadx.addComment");
+        if (handler == null) {
+            return CompletableFuture.failedFuture(new IllegalStateException("Comment command is not registered"));
+        }
+        if (params == null) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("jadx/addComment requires params"));
+        }
+        return handler.apply(List.of(params));
+    }
+
+    public CompletableFuture<Object> exportMappingsRequest(Map<String, Object> params) {
+        var handler = commands.get("rejadx.exportMappings");
+        if (handler == null) {
+            return CompletableFuture.failedFuture(new IllegalStateException("Export mappings command is not registered"));
+        }
+        return handler.apply(List.of(params == null ? Map.of() : params));
     }
 
     @Override
