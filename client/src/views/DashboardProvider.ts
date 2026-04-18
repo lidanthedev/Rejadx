@@ -27,13 +27,15 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     initStatus: string;
     classCount: number;
     recentProjects: string[];
+    environmentWarning: string;
     telemetry?: TelemetryUpdate;
   } = {
     phase: 'init',
     apkPath: '',
     initStatus: 'No project loaded.',
     classCount: 0,
-    recentProjects: []
+    recentProjects: [],
+    environmentWarning: ''
   };
 
   constructor(private readonly _extensionUri: vscode.Uri) {}
@@ -88,6 +90,11 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
   setApkPath(path: string): void {
     this._state.apkPath = path;
+    this._pushState();
+  }
+
+  setEnvironmentWarning(message: string): void {
+    this._state.environmentWarning = message;
     this._pushState();
   }
 
@@ -185,6 +192,15 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
     button:hover { background: var(--vscode-button-hoverBackground); }
     #init-status { font-size: 0.85em; color: var(--vscode-descriptionForeground); }
     #dash { display: none; }
+    #env-warning {
+      display: none;
+      margin-bottom: 8px;
+      padding: 6px 8px;
+      border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-editorWarning-foreground));
+      color: var(--vscode-inputValidation-warningForeground, var(--vscode-editorWarning-foreground));
+      background: var(--vscode-inputValidation-warningBackground, transparent);
+      font-size: 0.8em;
+    }
     .kv {
       display: flex;
       justify-content: space-between;
@@ -231,6 +247,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
   </style>
 </head>
 <body>
+  <div id="env-warning"></div>
+
   <div id="init">
     <h2>ReJadx</h2>
     <div class="row">
@@ -293,6 +311,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
         const init = document.getElementById('init');
         const dash = document.getElementById('dash');
+        const warning = document.getElementById('env-warning');
         const recentWrap = document.getElementById('recent-wrap');
         const initStatus = document.getElementById('init-status');
         const openBtn = document.getElementById('open-btn');
@@ -305,6 +324,14 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         init.style.display = showDashboard ? 'none' : 'block';
         dash.style.display = showDashboard ? 'block' : 'none';
         recentWrap.style.display = phase === 'init' ? 'block' : 'none';
+
+        if (typeof msg.environmentWarning === 'string' && msg.environmentWarning.length > 0) {
+          warning.textContent = msg.environmentWarning;
+          warning.style.display = 'block';
+        } else {
+          warning.textContent = '';
+          warning.style.display = 'none';
+        }
 
         initStatus.textContent = msg.initStatus || (phase === 'loading' ? 'Loading...' : 'No project loaded.');
         openBtn.disabled = phase === 'loading';
@@ -384,6 +411,7 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
       initStatus: this._state.initStatus,
       classCount: this._state.classCount,
       recentProjects: this._state.recentProjects,
+      environmentWarning: this._state.environmentWarning,
       telemetry: this._state.telemetry
     });
   }

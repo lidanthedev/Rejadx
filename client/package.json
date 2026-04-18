@@ -38,6 +38,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable hybrid cache (in-memory + disk-backed code strings). If disabled, uses in-memory code cache only."
+        },
+        "rejadx.jadxJarPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to local JADX fat jar (for example jadx-<version>-all.jar). Required to start ReJadx server."
         }
       }
     },
@@ -112,6 +117,10 @@
       {
         "command": "rejadx.resetProjectCodeCache",
         "title": "ReJadx: Reset Code Cache"
+      },
+      {
+        "command": "rejadx.selectJadxJar",
+        "title": "ReJadx: Select JADX JAR"
       }
     ],
     "keybindings": [

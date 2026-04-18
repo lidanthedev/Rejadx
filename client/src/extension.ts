@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
-import { startLanguageClient, stopLanguageClient, stopLanguageClientAndDisposeOutput, getClient, getReJadxSettings } from './languageClient';
+import { startLanguageClient, stopLanguageClient, stopLanguageClientAndDisposeOutput, getClient, getReJadxSettings, validateConfiguredJadxJarPath } from './languageClient';
 import { DashboardProvider, TelemetryUpdate } from './views/DashboardProvider';
 import { ClassTreeProvider, PackageNode } from './views/ClassTreeProvider';
 
@@ -54,6 +54,8 @@ const RECENT_PROJECTS_KEY = 'recentProjects';
 const MAX_RECENT_PROJECTS = 5;
 const PROJECT_OPEN_TABS_KEY = 'projectOpenTabs';
 const MAX_PROJECT_TABS = 30;
+const MISSING_JADX_PROMPTED_KEY = 'missingJadxJarPrompted';
+const JADX_DOWNLOAD_URL = 'https://github.com/skylot/jadx/releases';
 
 function languageIdForJadxUri(uri: vscode.Uri): string {
   const q = uri.query || '';
@@ -182,6 +184,66 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       showCollapseAll: true
     })
   );
+
+  const updateJadxEnvironmentWarning = (): void => {
+    const validation = validateConfiguredJadxJarPath();
+    dashboardProvider.setEnvironmentWarning(validation.ok
+      ? ''
+      : (validation.reason ?? 'JADX jar is not configured.'));
+  };
+
+  const promptForJadxJarOnFirstRunIfNeeded = async (): Promise<void> => {
+    const validation = validateConfiguredJadxJarPath();
+    updateJadxEnvironmentWarning();
+    if (validation.ok) {
+      return;
+    }
+
+    const alreadyPrompted = context.globalState.get<boolean>(MISSING_JADX_PROMPTED_KEY, false);
+    if (alreadyPrompted) {
+      return;
+    }
+
+    await context.globalState.update(MISSING_JADX_PROMPTED_KEY, true);
+
+    const pick = await vscode.window.showWarningMessage(
+      'ReJadx needs a local JADX JAR to run. Select your JADX jar or download it.',
+      'Select JAR',
+      'Download JADX'
+    );
+
+    if (pick === 'Select JAR') {
+      await vscode.commands.executeCommand('rejadx.selectJadxJar');
+      return;
+    }
+    if (pick === 'Download JADX') {
+      await vscode.env.openExternal(vscode.Uri.parse(JADX_DOWNLOAD_URL));
+    }
+  };
+
+  context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((e) => {
+    if (e.affectsConfiguration('rejadx.jadxJarPath')) {
+      updateJadxEnvironmentWarning();
+    }
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('rejadx.selectJadxJar', async () => {
+    const pick = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      title: 'Select JADX jar',
+      filters: { 'JAR Files': ['jar'], 'All Files': ['*'] }
+    });
+    if (!pick || !pick[0]) {
+      return;
+    }
+
+    const cfg = vscode.workspace.getConfiguration('rejadx');
+    await cfg.update('jadxJarPath', pick[0].fsPath, vscode.ConfigurationTarget.Global);
+    updateJadxEnvironmentWarning();
+    vscode.window.showInformationMessage(`ReJadx: JADX jar path set to ${pick[0].fsPath}`);
+  }));
 
   const getRecentProjects = (): string[] => {
     const saved = context.workspaceState.get<string[]>(RECENT_PROJECTS_KEY);
@@ -337,6 +399,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (lastLoadedApkPath) {
       dashboardProvider.setApkPath(lastLoadedApkPath);
     }
+    updateJadxEnvironmentWarning();
   };
 
   dashboardProvider.setViewReadyHandler(() => {
@@ -349,6 +412,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   ensureClientStarted = async (): Promise<NonNullable<ReturnType<typeof getClient>>> => {
+    const validation = validateConfiguredJadxJarPath();
+    if (!validation.ok) {
+      updateJadxEnvironmentWarning();
+      throw new Error(validation.reason ?? 'JADX jar is not configured');
+    }
+
     if (!getClient()) {
       await startLanguageClient(context);
     }
@@ -383,6 +452,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     return client;
   };
+
+  void promptForJadxJarOnFirstRunIfNeeded();
 
   dashboardProvider.setBrowseHandler(async () => {
     const uris = await vscode.window.showOpenDialog({

@@ -12,6 +12,12 @@ import {
 let client: LanguageClient | undefined;
 let clientOutputChannel: vscode.OutputChannel | undefined;
 
+export interface JadxJarValidation {
+  ok: boolean;
+  path: string;
+  reason?: string;
+}
+
 function parseJavaMajor(versionOutput: string): number | null {
   const match = versionOutput.match(/version\s+"([^"]+)"/i);
   if (!match) {
@@ -42,11 +48,63 @@ function ensureJava21Available(): void {
   }
 }
 
+export function validateConfiguredJadxJarPath(): JadxJarValidation {
+  const rawPath = (getReJadxSettings().jadxJarPath ?? '').trim();
+  if (!rawPath) {
+    return {
+      ok: false,
+      path: '',
+      reason: 'JADX JAR path is not configured in settings.'
+    };
+  }
+
+  try {
+    if (!fs.existsSync(rawPath)) {
+      return {
+        ok: false,
+        path: rawPath,
+        reason: `JADX JAR not found: ${rawPath}`
+      };
+    }
+
+    if (!fs.statSync(rawPath).isFile()) {
+      return {
+        ok: false,
+        path: rawPath,
+        reason: `JADX path is not a file: ${rawPath}`
+      };
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      path: rawPath,
+      reason: `Cannot access JADX JAR path: ${e instanceof Error ? e.message : String(e)}`
+    };
+  }
+
+  if (!rawPath.toLowerCase().endsWith('.jar')) {
+    return {
+      ok: false,
+      path: rawPath,
+      reason: `JADX path is not a .jar file: ${rawPath}`
+    };
+  }
+
+  return { ok: true, path: rawPath };
+}
+
 export async function startLanguageClient(context: vscode.ExtensionContext): Promise<void> {
   const serverJar = path.join(context.extensionPath, 'bin', 'jadx-server.jar');
 
   if (!fs.existsSync(serverJar)) {
     const msg = 'ReJadx: bundled language server is missing. Reinstall the extension.';
+    vscode.window.showErrorMessage(msg);
+    throw new Error(msg);
+  }
+
+  const jadxJar = validateConfiguredJadxJarPath();
+  if (!jadxJar.ok) {
+    const msg = `ReJadx requires a local JADX JAR path. Set 'rejadx.jadxJarPath' in settings. ${jadxJar.reason ?? ''}`.trim();
     vscode.window.showErrorMessage(msg);
     throw new Error(msg);
   }
@@ -62,7 +120,7 @@ export async function startLanguageClient(context: vscode.ExtensionContext): Pro
 
   const serverOptions: ServerOptions = {
     command: 'java',
-    args: ['-jar', serverJar],
+    args: ['-cp', `${serverJar}${path.delimiter}${jadxJar.path}`, 'dev.rejadx.server.ReJadxServer'],
     transport: TransportKind.stdio,
     options: {
       env: { ...process.env }
@@ -102,6 +160,7 @@ export interface ReJadxClientSettings {
   customJadxArgs: string;
   enableExternalPlugins: boolean;
   enableCodeCache: boolean;
+  jadxJarPath: string;
 }
 
 export function getReJadxSettings(): ReJadxClientSettings {
@@ -110,7 +169,8 @@ export function getReJadxSettings(): ReJadxClientSettings {
   const customJadxArgs = cfg.get<string>('customJadxArgs', '');
   const enableExternalPlugins = cfg.get<boolean>('enableExternalPlugins', false);
   const enableCodeCache = cfg.get<boolean>('enableCodeCache', true);
-  return { searchMaxResults, customJadxArgs, enableExternalPlugins, enableCodeCache };
+  const jadxJarPath = cfg.get<string>('jadxJarPath', '');
+  return { searchMaxResults, customJadxArgs, enableExternalPlugins, enableCodeCache, jadxJarPath };
 }
 
 export async function stopLanguageClient(): Promise<void> {
