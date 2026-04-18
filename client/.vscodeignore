@@ -4,6 +4,7 @@ out/**
 node_modules/**
 src/**
 .gitignore
+.releaserc.json
 tsconfig.json
 webpack.config.js
 *.tsbuildinfo
