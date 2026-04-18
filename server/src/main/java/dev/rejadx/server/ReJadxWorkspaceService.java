@@ -13,6 +13,7 @@ import org.eclipse.lsp4j.services.WorkspaceService;
 
 import dev.rejadx.server.client.ReJadxClient;
 import dev.rejadx.server.commands.AddCommentCommand;
+import dev.rejadx.server.commands.CloseProjectCommand;
 import dev.rejadx.server.commands.ExportMappingsCommand;
 import dev.rejadx.server.commands.GetCommentCommand;
 import dev.rejadx.server.commands.GetPackagesCommand;
@@ -32,6 +33,7 @@ public class ReJadxWorkspaceService implements WorkspaceService {
         commands.put("rejadx.getComment",   new GetCommentCommand(manager)::execute);
         commands.put("rejadx.addComment",   new AddCommentCommand(manager)::execute);
         commands.put("rejadx.exportMappings", new ExportMappingsCommand(manager)::execute);
+        commands.put("rejadx.closeProject", new CloseProjectCommand(manager)::execute);
         commands.put("rejadx.saveProject",  new SaveProjectCommand(manager)::execute);
     }
 

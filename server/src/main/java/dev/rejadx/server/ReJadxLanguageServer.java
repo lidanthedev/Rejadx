@@ -29,6 +29,7 @@ public class ReJadxLanguageServer implements LanguageServer, LanguageClientAware
             "rejadx.getSource",
             "rejadx.addComment",
             "rejadx.exportMappings",
+            "rejadx.closeProject",
             "rejadx.saveProject"
     );
 

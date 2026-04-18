@@ -18,6 +18,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
   private _view: vscode.WebviewView | undefined;
   private _onOpenApkFn: ((path: string) => Promise<void>) | undefined;
   private _onBrowseFn: (() => Promise<void>) | undefined;
+  private _onRestartProjectFn: (() => Promise<void>) | undefined;
+  private _onStopProjectFn: (() => Promise<void>) | undefined;
   private _state: {
     phase: 'init' | 'loading' | 'loaded';
     apkPath: string;
@@ -52,6 +54,10 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
         await this._onOpenApkFn?.(msg.apkPath);
       } else if (msg.command === 'browseApk') {
         await this._onBrowseFn?.();
+      } else if (msg.command === 'restartProject') {
+        await this._onRestartProjectFn?.();
+      } else if (msg.command === 'stopProject') {
+        await this._onStopProjectFn?.();
       }
     });
 
@@ -60,6 +66,8 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
   setOpenApkHandler(fn: (path: string) => Promise<void>): void { this._onOpenApkFn = fn; }
   setBrowseHandler(fn: () => Promise<void>): void { this._onBrowseFn = fn; }
+  setRestartProjectHandler(fn: () => Promise<void>): void { this._onRestartProjectFn = fn; }
+  setStopProjectHandler(fn: () => Promise<void>): void { this._onStopProjectFn = fn; }
 
   setApkPath(path: string): void {
     this._state.apkPath = path;
@@ -83,6 +91,14 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
   notifyProjectLoadFailed(message: string): void {
     this._state.phase = this._state.classCount > 0 ? 'loaded' : 'init';
     this._state.initStatus = message;
+    this._pushState();
+  }
+
+  notifyProjectClosed(): void {
+    this._state.phase = 'init';
+    this._state.classCount = 0;
+    this._state.telemetry = undefined;
+    this._state.initStatus = 'No project loaded.';
     this._pushState();
   }
 
@@ -193,6 +209,10 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
   <div id="dash">
     <h2>ReJadx</h2>
+    <div class="row">
+      <button id="restart-btn" style="flex:1">Restart</button>
+      <button id="stop-btn" style="flex:1">Stop</button>
+    </div>
     <div class="kv"><span>Status</span><span id="proj-status" class="val">ready</span></div>
     <div class="kv"><span>Classes</span><span id="class-count" class="val">0</span></div>
     <div class="mem-wrap"><div id="mem-fill"></div></div>
@@ -213,6 +233,13 @@ export class DashboardProvider implements vscode.WebviewViewProvider {
 
     document.getElementById('browse-btn').addEventListener('click', () => {
       vscode.postMessage({ command: 'browseApk' });
+    });
+
+    document.getElementById('restart-btn').addEventListener('click', () => {
+      vscode.postMessage({ command: 'restartProject' });
+    });
+    document.getElementById('stop-btn').addEventListener('click', () => {
+      vscode.postMessage({ command: 'stopProject' });
     });
 
     window.addEventListener('message', e => {

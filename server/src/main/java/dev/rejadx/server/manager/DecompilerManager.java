@@ -142,6 +142,26 @@ public class DecompilerManager {
         ProjectStateStore.save(stateFile, currentInputFile, engine.getCodeData());
     }
 
+    /** Closes current project and releases decompiler resources. */
+    public void closeProject() {
+        lock.writeLock().lock();
+        try {
+            if (engine != null) {
+                try {
+                    engine.close();
+                } catch (Exception e) {
+                    log.warn("Failed to close engine: {}", e.getMessage());
+                }
+                engine = null;
+            }
+            currentInputFile = null;
+            currentCacheDir = null;
+            setStatus("idle");
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     public void shutdown() {
         if (telemetryFuture != null) telemetryFuture.cancel(false);
         telemetryScheduler.shutdown();

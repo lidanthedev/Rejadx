@@ -24,6 +24,16 @@ interface CommentLookupResult {
   style: string;
 }
 
+let currentExtensionContext: vscode.ExtensionContext | undefined;
+
+async function hardRestartLanguageClient(): Promise<void> {
+  await stopLanguageClient();
+  if (!currentExtensionContext) {
+    throw new Error('Extension context unavailable');
+  }
+  await startLanguageClient(currentExtensionContext);
+}
+
 function languageIdForJadxUri(uri: vscode.Uri): string {
   const q = uri.query || '';
   return q.includes('type=smali') ? 'smali' : 'java';
@@ -103,7 +113,10 @@ class JadxContentProvider implements vscode.TextDocumentContentProvider {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  currentExtensionContext = context;
+
   let clientHooksInstalled = false;
+  let lastLoadedApkPath: string | undefined;
   let ensureClientStarted: () => Promise<NonNullable<ReturnType<typeof getClient>>>;
 
   const contentProvider = new JadxContentProvider();
@@ -189,6 +202,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         return;
       }
 
+      lastLoadedApkPath = apkPath;
       dashboardProvider.notifyProjectLoaded(result.classCount ?? 0);
 
       const packages = await lc.sendRequest('workspace/executeCommand', {
@@ -198,6 +212,56 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       classTreeProvider.setRoots(packages);
     } catch (err) {
       vscode.window.showErrorMessage(`ReJadx: ${err}`);
+    }
+  });
+
+  dashboardProvider.setRestartProjectHandler(async () => {
+    try {
+      await hardRestartLanguageClient();
+      clientHooksInstalled = false;
+      // Re-establish hooks on demand
+      const lc = await ensureClientStarted();
+
+      if (lastLoadedApkPath) {
+        dashboardProvider.notifyProjectLoading(lastLoadedApkPath);
+
+        const result = await lc.sendRequest('workspace/executeCommand', {
+          command: 'rejadx.loadProject',
+          arguments: [lastLoadedApkPath]
+        }) as { classCount?: number; loaded: boolean; error?: string };
+
+        if (!result.loaded) {
+          const reason = result.error ?? 'Failed to load project';
+          dashboardProvider.notifyProjectLoadFailed(reason);
+          vscode.window.showErrorMessage(`ReJadx: ${reason}`);
+          return;
+        }
+
+        dashboardProvider.notifyProjectLoaded(result.classCount ?? 0);
+
+        const packages = await lc.sendRequest('workspace/executeCommand', {
+          command: 'rejadx.getPackages',
+          arguments: []
+        }) as PackageNode[];
+        classTreeProvider.setRoots(packages);
+      } else {
+        dashboardProvider.notifyProjectClosed();
+      }
+      vscode.window.showInformationMessage('ReJadx: server restarted.');
+    } catch (err) {
+      vscode.window.showErrorMessage(`ReJadx: restart failed: ${err}`);
+    }
+  });
+
+  dashboardProvider.setStopProjectHandler(async () => {
+    try {
+      await stopLanguageClient();
+      clientHooksInstalled = false;
+      dashboardProvider.notifyProjectClosed();
+      classTreeProvider.setRoots([]);
+      vscode.window.showInformationMessage('ReJadx: server stopped.');
+    } catch (err) {
+      vscode.window.showErrorMessage(`ReJadx: stop failed: ${err}`);
     }
   });
 
