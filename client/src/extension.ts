@@ -25,8 +25,11 @@ interface CommentLookupResult {
 }
 
 let currentExtensionContext: vscode.ExtensionContext | undefined;
+let persistOnDeactivate: (() => Promise<void>) | undefined;
 const RECENT_PROJECTS_KEY = 'recentProjects';
 const MAX_RECENT_PROJECTS = 5;
+const PROJECT_OPEN_TABS_KEY = 'projectOpenTabs';
+const MAX_PROJECT_TABS = 30;
 
 async function hardRestartLanguageClient(): Promise<void> {
   await stopLanguageClient();
@@ -145,6 +148,77 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return Array.isArray(saved) ? saved.filter(Boolean) : [];
   };
 
+  const getProjectOpenTabsMap = (): Record<string, string[]> => {
+    const saved = context.workspaceState.get<Record<string, string[]>>(PROJECT_OPEN_TABS_KEY);
+    return saved && typeof saved === 'object' ? saved : {};
+  };
+
+  const saveProjectOpenTabsMap = async (value: Record<string, string[]>): Promise<void> => {
+    await context.workspaceState.update(PROJECT_OPEN_TABS_KEY, value);
+  };
+
+  const getOpenJadxUris = (): string[] => {
+    const uris: string[] = [];
+    for (const group of vscode.window.tabGroups.all) {
+      for (const tab of group.tabs) {
+        const input = tab.input as unknown as { uri?: vscode.Uri };
+        if (input?.uri?.scheme === 'jadx') {
+          uris.push(input.uri.toString());
+        }
+      }
+    }
+    return [...new Set(uris)];
+  };
+
+  const persistCurrentProjectTabs = async (): Promise<void> => {
+    if (!lastLoadedApkPath) {
+      return;
+    }
+    const openUris = getOpenJadxUris().slice(0, MAX_PROJECT_TABS);
+    const map = getProjectOpenTabsMap();
+    map[lastLoadedApkPath] = openUris;
+    await saveProjectOpenTabsMap(map);
+  };
+
+  persistOnDeactivate = persistCurrentProjectTabs;
+
+  let persistTabsTimer: NodeJS.Timeout | undefined;
+  const schedulePersistTabs = (): void => {
+    if (persistTabsTimer) {
+      clearTimeout(persistTabsTimer);
+    }
+    persistTabsTimer = setTimeout(() => {
+      void persistCurrentProjectTabs();
+    }, 400);
+  };
+
+  context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(() => {
+    schedulePersistTabs();
+  }));
+
+  const restoreProjectTabs = async (apkPath: string): Promise<void> => {
+    const map = getProjectOpenTabsMap();
+    const saved = Array.isArray(map[apkPath]) ? map[apkPath] : [];
+    if (saved.length === 0) {
+      return;
+    }
+
+    const alreadyOpen = new Set(vscode.workspace.textDocuments.map(d => d.uri.toString()));
+    for (const raw of saved) {
+      if (!raw || alreadyOpen.has(raw)) {
+        continue;
+      }
+      try {
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(raw), {
+          preview: false,
+          preserveFocus: true
+        });
+      } catch {
+        // Skip tabs that fail to restore.
+      }
+    }
+  };
+
   const saveRecentProjects = async (projects: string[]): Promise<void> => {
     await context.workspaceState.update(RECENT_PROJECTS_KEY, projects);
     dashboardProvider.setRecentProjects(projects);
@@ -206,6 +280,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   dashboardProvider.setOpenApkHandler(async (apkPath: string) => {
+    if (lastLoadedApkPath && lastLoadedApkPath !== apkPath) {
+      await persistCurrentProjectTabs();
+    }
+
     dashboardProvider.notifyProjectLoading(apkPath);
 
     try {
@@ -231,6 +309,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         arguments: []
       }) as PackageNode[];
       classTreeProvider.setRoots(packages);
+
+      await restoreProjectTabs(apkPath);
     } catch (err) {
       vscode.window.showErrorMessage(`ReJadx: ${err}`);
     }
@@ -238,6 +318,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   dashboardProvider.setRestartProjectHandler(async () => {
     try {
+      await persistCurrentProjectTabs();
+
       await hardRestartLanguageClient();
       clientHooksInstalled = false;
       // Re-establish hooks on demand
@@ -265,6 +347,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           arguments: []
         }) as PackageNode[];
         classTreeProvider.setRoots(packages);
+
+        await restoreProjectTabs(lastLoadedApkPath);
       } else {
         dashboardProvider.notifyProjectClosed();
       }
@@ -276,6 +360,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   dashboardProvider.setStopProjectHandler(async () => {
     try {
+      await persistCurrentProjectTabs();
+
       await stopLanguageClient();
       clientHooksInstalled = false;
       dashboardProvider.notifyProjectClosed();
@@ -467,5 +553,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export async function deactivate(): Promise<void> {
+  try {
+    if (persistOnDeactivate) {
+      await persistOnDeactivate();
+    }
+  } catch {
+    // ignore
+  }
   await stopLanguageClient();
 }
