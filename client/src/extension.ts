@@ -286,7 +286,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     // Give language client/server a moment to fully settle after load/restart.
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     const alreadyOpen = new Set(vscode.workspace.textDocuments.map(d => d.uri.toString()));
     for (const raw of saved) {
