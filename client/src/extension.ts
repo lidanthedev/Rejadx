@@ -28,6 +28,12 @@ interface LspWorkspaceEdit {
   changes?: Record<string, LspTextEdit[]>;
 }
 
+interface CommentLookupResult {
+  exists: boolean;
+  comment: string;
+  style: string;
+}
+
 function languageIdForJadxUri(uri: vscode.Uri): string {
   const q = uri.query || '';
   return q.includes('type=smali') ? 'plaintext' : 'java';
@@ -107,15 +113,6 @@ class JadxContentProvider implements vscode.TextDocumentContentProvider {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const debugChannel = vscode.window.createOutputChannel('ReJadx Debug');
-  context.subscriptions.push(debugChannel);
-
-  const logDebug = (message: string): void => {
-    debugChannel.appendLine(`[${new Date().toISOString()}] ${message}`);
-  };
-
-  let renameProviderTouched = false;
-
   const applyLspWorkspaceEdit = async (edit: LspWorkspaceEdit): Promise<boolean> => {
     const wsEdit = new vscode.WorkspaceEdit();
     const changes = edit?.changes ?? {};
@@ -237,16 +234,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       return;
     }
 
-    const comment = await vscode.window.showInputBox({
-      prompt: 'Add comment',
-      placeHolder: 'Enter comment text',
-      ignoreFocusOut: true,
-      validateInput: (value) => value.trim().length === 0 ? 'Comment cannot be empty' : null
-    });
-    if (!comment) {
-      return;
-    }
-
     const client = getClient();
     if (!client) {
       vscode.window.showErrorMessage('ReJadx: Language server not ready.');
@@ -254,12 +241,40 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     const pos = editor.selection.active;
+
+    let initialComment = '';
+    try {
+      const lookup = await client.sendRequest('workspace/executeCommand', {
+        command: 'rejadx.getComment',
+        arguments: [{
+          uri: uri.toString(),
+          line: pos.line,
+          character: pos.character
+        }]
+      }) as CommentLookupResult;
+      if (lookup?.exists) {
+        initialComment = lookup.comment ?? '';
+      }
+    } catch {
+      // Ignore prefill lookup errors.
+    }
+
+    const comment = await vscode.window.showInputBox({
+      prompt: 'Set comment (empty to remove)',
+      placeHolder: 'Enter comment text',
+      value: initialComment,
+      ignoreFocusOut: true
+    });
+    if (comment === undefined) {
+      return;
+    }
+
     try {
       const res = await client.sendRequest('jadx/addComment', {
         uri: uri.toString(),
         line: pos.line,
         character: pos.character,
-        comment: comment.trim(),
+        comment,
         style: 'LINE'
       }) as { content?: string };
 
@@ -269,7 +284,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         contentProvider.invalidate(uri.toString());
       }
 
-      vscode.window.showInformationMessage('ReJadx: Comment added.');
+      vscode.window.showInformationMessage(comment.trim().length === 0
+        ? 'ReJadx: Comment removed.'
+        : 'ReJadx: Comment updated.');
     } catch (err) {
       vscode.window.showErrorMessage(`ReJadx: add comment failed: ${err}`);
     }
@@ -278,132 +295,61 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(vscode.commands.registerCommand('rejadx.renameAtCursor', async () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.uri.scheme !== 'jadx') {
-      logDebug('renameAtCursor ignored (no jadx active editor)');
       return;
     }
-    logDebug(`renameAtCursor doc info: language=${editor.document.languageId} isClosed=${editor.document.isClosed} isDirty=${editor.document.isDirty}`);
-    renameProviderTouched = false;
-    logDebug(`renameAtCursor invoked: uri=${editor.document.uri.toString()} line=${editor.selection.active.line} char=${editor.selection.active.character}`);
-    await vscode.commands.executeCommand('editor.action.rename');
-    logDebug('editor.action.rename command executed');
-
-    setTimeout(() => {
-      if (!renameProviderTouched) {
-        logDebug('rename provider was not invoked by editor.action.rename');
-        void vscode.commands.executeCommand('rejadx.renameAtCursorDirect');
-        logDebug('fallback triggered: rejadx.renameAtCursorDirect');
-      }
-    }, 500);
+    await vscode.commands.executeCommand('rejadx.renameAtCursorDirect');
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand('rejadx.renameAtCursorDirect', async () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.uri.scheme !== 'jadx') {
-      logDebug('renameAtCursorDirect ignored (no jadx active editor)');
       return;
     }
+
+    const selectedText = editor.document.getText(editor.selection);
+    const initialName = selectedText.length > 0
+      ? selectedText
+      : (() => {
+        const wordRange = editor.document.getWordRangeAtPosition(editor.selection.active);
+        return wordRange ? editor.document.getText(wordRange) : '';
+      })();
+
     const newName = await vscode.window.showInputBox({
-      prompt: 'Rename symbol to',
+      prompt: 'Rename symbol (empty to reset)',
+      value: initialName,
       ignoreFocusOut: true,
-      validateInput: (v) => v.trim().length === 0 ? 'Name cannot be empty' : null
+      validateInput: (v) => {
+        if (v.length === 0) {
+          return null;
+        }
+        return /^[$_a-zA-Z][$_a-zA-Z0-9]*$/.test(v) ? null : 'Invalid Java identifier';
+      }
     });
-    if (!newName) {
-      logDebug('renameAtCursorDirect cancelled by user');
+    if (newName === undefined) {
       return;
     }
+
     const client = getClient();
     if (!client) {
-      logDebug('renameAtCursorDirect failed: language server not ready');
       vscode.window.showErrorMessage('ReJadx: Language server not ready.');
       return;
     }
+
     try {
       const pos = editor.selection.active;
-      logDebug(`renameAtCursorDirect request: uri=${editor.document.uri.toString()} line=${pos.line} char=${pos.character} newName=${newName}`);
       const edit = await client.sendRequest('textDocument/rename', {
         textDocument: { uri: editor.document.uri.toString() },
         position: { line: pos.line, character: pos.character },
-        newName: newName.trim()
+        newName
       }) as LspWorkspaceEdit;
       const applied = await applyLspWorkspaceEdit(edit);
-      logDebug(`renameAtCursorDirect applied=${applied}`);
       if (!applied) {
         vscode.window.showWarningMessage('ReJadx: rename edit was not applied.');
       }
     } catch (err) {
-      logDebug(`renameAtCursorDirect error: ${err instanceof Error ? err.stack || err.message : String(err)}`);
       vscode.window.showErrorMessage(`ReJadx: rename failed: ${err}`);
     }
   }));
-
-  context.subscriptions.push(vscode.languages.registerRenameProvider({ scheme: 'jadx', language: 'java' }, {
-    provideRenameEdits(document, position, newName, token) {
-      renameProviderTouched = true;
-      logDebug(`provideRenameEdits called: uri=${document.uri.toString()} line=${position.line} char=${position.character} newName=${newName}`);
-      const client = getClient();
-      if (!client) {
-        logDebug('provideRenameEdits failed: language server not ready');
-        throw new Error('Language server not ready');
-      }
-      return client.sendRequest('textDocument/rename', {
-        textDocument: { uri: document.uri.toString() },
-        position: { line: position.line, character: position.character },
-        newName
-      }, token).then((edit) => {
-        const changeKeys = edit && (edit as { changes?: Record<string, unknown> }).changes
-          ? Object.keys((edit as { changes?: Record<string, unknown> }).changes || {})
-          : [];
-        logDebug(`provideRenameEdits success: changeUris=${changeKeys.join(',') || '(none)'}`);
-        return edit as vscode.WorkspaceEdit;
-      }, (err) => {
-        logDebug(`provideRenameEdits error: ${err instanceof Error ? err.stack || err.message : String(err)}`);
-        throw err;
-      }) as Thenable<vscode.WorkspaceEdit>;
-    },
-    prepareRename(document, position, token) {
-      renameProviderTouched = true;
-      logDebug(`prepareRename called: uri=${document.uri.toString()} line=${position.line} char=${position.character}`);
-      const client = getClient();
-      if (!client) {
-        logDebug('prepareRename skipped: language server not ready');
-        return null;
-      }
-      return client.sendRequest('textDocument/definition', {
-        textDocument: { uri: document.uri.toString() },
-        position: { line: position.line, character: position.character }
-      }, token).then((defs) => {
-        logDebug(`prepareRename definition raw: ${JSON.stringify(defs)}`);
-
-        const arr = Array.isArray(defs)
-          ? defs as Array<{ uri: string; range: vscode.Range }>
-          : (defs as { left?: Array<{ uri: string; range: vscode.Range }> } | undefined)?.left;
-
-        if (!arr || arr.length === 0) {
-          logDebug('prepareRename result: null (no definition locations)');
-          return null;
-        }
-        const same = arr.find(d => vscode.Uri.parse(d.uri).toString() === document.uri.toString());
-        if (same && same.range) {
-          const range = new vscode.Range(
-            same.range.start.line,
-            same.range.start.character,
-            same.range.end.line,
-            same.range.end.character
-          );
-          logDebug(`prepareRename result: same-doc range ${range.start.line}:${range.start.character}-${range.end.line}:${range.end.character}`);
-          return range;
-        }
-        const fallback = new vscode.Range(position, position.translate(0, 1));
-        logDebug(`prepareRename result: fallback range ${fallback.start.line}:${fallback.start.character}-${fallback.end.line}:${fallback.end.character}`);
-        return fallback;
-      }, (err) => {
-        logDebug(`prepareRename error: ${err instanceof Error ? err.stack || err.message : String(err)}`);
-        return null;
-      });
-    }
-  }));
-
-  logDebug('rename provider registered for selector {scheme: jadx, language: java}');
 }
 
 export async function deactivate(): Promise<void> {

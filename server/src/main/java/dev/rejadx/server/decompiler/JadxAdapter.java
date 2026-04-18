@@ -38,6 +38,7 @@ import jadx.api.metadata.annotations.VarNode;
 import jadx.api.metadata.annotations.VarRef;
 
 import dev.rejadx.server.model.PackageNode;
+import dev.rejadx.server.model.CommentInfo;
 import dev.rejadx.server.model.RenameTarget;
 import dev.rejadx.server.model.ResolvedNode;
 import dev.rejadx.server.model.SourceType;
@@ -219,7 +220,12 @@ public class JadxAdapter implements IDecompilerEngine {
         List<ICodeRename> renames = new ArrayList<>(liveCodeData.getRenames());
         renames.removeIf(r -> r.getNodeRef().equals(nodeRef)
                 && java.util.Objects.equals(r.getCodeRef(), codeRef));
-        renames.add(new JadxCodeRename(nodeRef, codeRef, newName));
+
+        boolean resetToOriginal = newName == null || newName.isEmpty();
+        if (!resetToOriginal) {
+            renames.add(new JadxCodeRename(nodeRef, codeRef, newName));
+        }
+
         liveCodeData.setRenames(renames);
         jadx.getArgs().setCodeData(liveCodeData);
         jadx.reloadCodeData();
@@ -272,7 +278,31 @@ public class JadxAdapter implements IDecompilerEngine {
         if (codeComment == null) {
             throw new IllegalArgumentException("No comment target at position (" + line + "," + character + ")");
         }
+
+        if (comment == null || comment.trim().isEmpty()) {
+            return removeCommentAt(codeComment);
+        }
         return applyComment(codeComment);
+    }
+
+    @Override
+    public CommentInfo findCommentAt(String rawClassName, int line, int character) throws Exception {
+        JavaClass cls = findClass(rawClassName);
+        ICodeInfo codeInfo = cls.getCodeInfo();
+        int charOffset = lineCharToOffset(codeInfo.getCodeStr(), line, character);
+
+        JadxCodeComment ref = resolveCommentRef(cls, codeInfo, charOffset, "", CommentStyle.LINE);
+        if (ref == null) {
+            return new CommentInfo(false, "", "LINE");
+        }
+
+        for (ICodeComment c : liveCodeData.getComments()) {
+            if (c.getNodeRef().equals(ref.getNodeRef())
+                    && java.util.Objects.equals(c.getCodeRef(), ref.getCodeRef())) {
+                return new CommentInfo(true, c.getComment(), c.getStyle().name());
+            }
+        }
+        return new CommentInfo(false, "", "LINE");
     }
 
     // --- State ---
@@ -504,6 +534,21 @@ public class JadxAdapter implements IDecompilerEngine {
 
     private static String safeName(String name) {
         return name == null ? "" : name;
+    }
+
+    private String removeCommentAt(ICodeComment target) throws Exception {
+        List<ICodeComment> comments = new ArrayList<>(liveCodeData.getComments());
+        comments.removeIf(c ->
+                c.getNodeRef().equals(target.getNodeRef())
+                        && java.util.Objects.equals(c.getCodeRef(), target.getCodeRef()));
+        liveCodeData.setComments(comments);
+        jadx.getArgs().setCodeData(liveCodeData);
+        jadx.reloadCodeData();
+
+        JavaClass affected = findAffectedClass(target.getNodeRef());
+        if (affected == null) throw new ClassNotFoundException("Could not resolve class for comment nodeRef");
+        affected.reload();
+        return affected.getCode();
     }
 
     private RenameTarget resolveRenameTargetFromAnnotation(ICodeInfo codeInfo, ICodeAnnotation annAt) {

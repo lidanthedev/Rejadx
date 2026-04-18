@@ -14,6 +14,7 @@ import dev.rejadx.server.model.RenameTarget;
 import dev.rejadx.server.model.ResolvedNode;
 import dev.rejadx.server.model.SourceType;
 import dev.rejadx.server.model.XrefLocation;
+import dev.rejadx.server.model.CommentInfo;
 
 public interface IDecompilerEngine extends Closeable {
 
@@ -64,6 +65,8 @@ public interface IDecompilerEngine extends Closeable {
      * Implementation may attach the comment either to an instruction or a node declaration.
      */
     String addCommentAt(String rawClassName, int line, int character, String comment, CommentStyle style) throws Exception;
+
+    CommentInfo findCommentAt(String rawClassName, int line, int character) throws Exception;
 
     // --- State ---
 

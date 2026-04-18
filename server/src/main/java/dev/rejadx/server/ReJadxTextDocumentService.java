@@ -173,7 +173,7 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 log.info("rename target: kind={} name={} uri={} line={} char={}",
                         target.getKind(), target.getName(), uri, pos.getLine(), pos.getCharacter());
 
-                if (!isValidIdentifier(newName)) {
+                if (!newName.isEmpty() && !isValidIdentifier(newName)) {
                     throw new IllegalArgumentException("Invalid identifier: " + newName);
                 }
 
