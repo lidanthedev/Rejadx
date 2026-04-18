@@ -8,6 +8,7 @@ import {
 } from 'vscode-languageclient/node';
 
 let client: LanguageClient | undefined;
+let clientOutputChannel: vscode.OutputChannel | undefined;
 
 export async function startLanguageClient(context: vscode.ExtensionContext): Promise<void> {
   // The fat JAR lives one level above the extension directory (monorepo layout):
@@ -25,10 +26,14 @@ export async function startLanguageClient(context: vscode.ExtensionContext): Pro
     }
   };
 
+  if (!clientOutputChannel) {
+    clientOutputChannel = vscode.window.createOutputChannel('ReJadx Language Server');
+  }
+
   const clientOptions: LanguageClientOptions = {
     // Only activate for virtual jadx:// documents — nothing ever touches disk.
     documentSelector: [{ scheme: 'jadx' }],
-    outputChannelName: 'ReJadx Language Server'
+    outputChannel: clientOutputChannel
   };
 
   client = new LanguageClient(
@@ -62,6 +67,14 @@ export async function stopLanguageClient(): Promise<void> {
   if (client) {
     await client.stop();
     client = undefined;
+  }
+}
+
+export async function stopLanguageClientAndDisposeOutput(): Promise<void> {
+  await stopLanguageClient();
+  if (clientOutputChannel) {
+    clientOutputChannel.dispose();
+    clientOutputChannel = undefined;
   }
 }
 

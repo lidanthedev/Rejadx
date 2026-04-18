@@ -100,6 +100,10 @@
         "title": "ReJadx: Open Virtual File"
       },
       {
+        "command": "rejadx.reopenJavaFile",
+        "title": "ReJadx: Reopen Java File"
+      },
+      {
         "command": "rejadx.resetProjectCodeCache",
         "title": "ReJadx: Reset Code Cache"
       }

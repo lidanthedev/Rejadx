@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
-import { startLanguageClient, stopLanguageClient, getClient, getReJadxSettings } from './languageClient';
+import { startLanguageClient, stopLanguageClient, stopLanguageClientAndDisposeOutput, getClient, getReJadxSettings } from './languageClient';
 import { DashboardProvider, TelemetryUpdate } from './views/DashboardProvider';
 import { ClassTreeProvider, PackageNode } from './views/ClassTreeProvider';
 
@@ -43,21 +43,12 @@ interface ResetCodeCacheResult {
   error?: string;
 }
 
-let currentExtensionContext: vscode.ExtensionContext | undefined;
 let persistOnDeactivate: (() => Promise<void>) | undefined;
 let closeTabsOnDeactivate: (() => Promise<void>) | undefined;
 const RECENT_PROJECTS_KEY = 'recentProjects';
 const MAX_RECENT_PROJECTS = 5;
 const PROJECT_OPEN_TABS_KEY = 'projectOpenTabs';
 const MAX_PROJECT_TABS = 30;
-
-async function hardRestartLanguageClient(): Promise<void> {
-  await stopLanguageClient();
-  if (!currentExtensionContext) {
-    throw new Error('Extension context unavailable');
-  }
-  await startLanguageClient(currentExtensionContext);
-}
 
 function languageIdForJadxUri(uri: vscode.Uri): string {
   const q = uri.query || '';
@@ -154,8 +145,6 @@ class JadxContentProvider implements vscode.TextDocumentContentProvider {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  currentExtensionContext = context;
-
   let clientHooksInstalled = false;
   let lastLoadedApkPath: string | undefined;
   let dashboardInitialized = false;
@@ -425,18 +414,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   });
 
+  const stopProjectSession = async (disposeOutputChannel: boolean): Promise<void> => {
+    await persistCurrentProjectTabs();
+    await closeVirtualTabsAfterSave();
+
+    if (disposeOutputChannel) {
+      await stopLanguageClientAndDisposeOutput();
+    } else {
+      await stopLanguageClient();
+    }
+    clientHooksInstalled = false;
+    dashboardProvider.notifyProjectClosed();
+    classTreeProvider.setRoots([]);
+  };
+
   dashboardProvider.setRestartProjectHandler(async () => {
     try {
-      await persistCurrentProjectTabs();
-      await closeVirtualTabsAfterSave();
-
-      await hardRestartLanguageClient();
-      clientHooksInstalled = false;
-      // Re-establish hooks on demand
+      const targetApk = lastLoadedApkPath;
+      await stopProjectSession(false);
       const lc = await ensureClientStarted();
 
-      if (lastLoadedApkPath) {
-        dashboardProvider.notifyProjectLoading(lastLoadedApkPath);
+      if (targetApk) {
+        dashboardProvider.notifyProjectLoading(targetApk);
 
         const settings = getReJadxSettings();
         await lc.sendRequest('workspace/executeCommand', {
@@ -450,7 +449,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         const result = await lc.sendRequest('workspace/executeCommand', {
           command: 'rejadx.loadProject',
-          arguments: [lastLoadedApkPath]
+          arguments: [targetApk]
         }) as { classCount?: number; loaded: boolean; error?: string };
 
         if (!result.loaded) {
@@ -468,7 +467,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }) as PackageNode[];
         classTreeProvider.setRoots(packages);
 
-        await restoreProjectTabs(lastLoadedApkPath);
+        await restoreProjectTabs(targetApk);
       } else {
         dashboardProvider.notifyProjectClosed();
       }
@@ -480,13 +479,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   dashboardProvider.setStopProjectHandler(async () => {
     try {
-      await persistCurrentProjectTabs();
-      await closeVirtualTabsAfterSave();
-
-      await stopLanguageClient();
-      clientHooksInstalled = false;
-      dashboardProvider.notifyProjectClosed();
-      classTreeProvider.setRoots([]);
+      await stopProjectSession(true);
       vscode.window.showInformationMessage('ReJadx: server stopped.');
     } catch (err) {
       vscode.window.showErrorMessage(`ReJadx: stop failed: ${err}`);
@@ -657,6 +650,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     const opposite = current.with({ query: nextQuery });
     await vscode.commands.executeCommand('vscode.open', opposite, vscode.ViewColumn.Beside);
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('rejadx.reopenJavaFile', async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.uri.scheme !== 'jadx') {
+      vscode.window.showWarningMessage('ReJadx: open a jadx virtual Java/Smali file first.');
+      return;
+    }
+
+    const current = editor.document.uri;
+    if (current.path.startsWith('/resources/')) {
+      vscode.window.showWarningMessage('ReJadx: Reopen Java File works only for decompiled classes.');
+      return;
+    }
+
+    const query = current.query || '';
+    const javaQuery = query.includes('type=smali')
+      ? query.replace('type=smali', 'type=java')
+      : (query.includes('type=java') ? query : (query ? `${query}&type=java` : 'type=java'));
+    const target = current.with({ query: javaQuery });
+
+    contentProvider.invalidate(target.toString());
+    await vscode.commands.executeCommand('vscode.open', target, {
+      preview: false,
+      selection: editor.selection
+    });
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand('jadx.exportProGuard', async () => {
