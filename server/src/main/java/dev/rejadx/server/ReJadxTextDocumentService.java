@@ -11,13 +11,16 @@ import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.LocationLink;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.ReferenceParams;
 import org.eclipse.lsp4j.RenameParams;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.WorkspaceEdit;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,13 +104,43 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 List<Location> locations = new ArrayList<>();
                 for (XrefLocation xref : xrefs) {
                     Position start = new Position(xref.getLine(), xref.getCharacter());
-                    Position end   = new Position(xref.getLine(), xref.getCharacter() + 1);
+                    Position end   = new Position(xref.getLine(), xref.getCharacter() + xref.getLength());
                     locations.add(new Location(xref.getUri(), new Range(start, end)));
                 }
                 return locations;
             } catch (Exception e) {
                 log.warn("references failed for {}: {}", uri, e.getMessage());
                 return Collections.emptyList();
+            } finally {
+                rl.unlock();
+            }
+        });
+    }
+
+    @Override
+    public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(DefinitionParams params) {
+        String uri = params.getTextDocument().getUri();
+        Position pos = params.getPosition();
+
+        return CompletableFuture.supplyAsync(() -> {
+            ReentrantReadWriteLock.ReadLock rl = manager.getLock().readLock();
+            rl.lock();
+            try {
+                IDecompilerEngine engine = manager.getEngine();
+                if (engine == null) return Either.forLeft(Collections.emptyList());
+
+                JadxUriParser.ParsedUri parsed = JadxUriParser.parse(uri);
+                String source = engine.getSource(parsed.rawClassName(), SourceType.JAVA);
+                int charOffset = lineCharToOffset(source, pos.getLine(), pos.getCharacter());
+                XrefLocation def = engine.getDefinition(parsed.rawClassName(), charOffset);
+                if (def == null) return Either.forLeft(Collections.emptyList());
+
+                Position start = new Position(def.getLine(), def.getCharacter());
+                Position end = new Position(def.getLine(), def.getCharacter() + def.getLength());
+                return Either.forLeft(List.of(new Location(def.getUri(), new Range(start, end))));
+            } catch (Exception e) {
+                log.warn("definition failed for {}: {}", uri, e.getMessage());
+                return Either.forLeft(Collections.emptyList());
             } finally {
                 rl.unlock();
             }

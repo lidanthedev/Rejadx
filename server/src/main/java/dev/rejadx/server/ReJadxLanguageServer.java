@@ -53,6 +53,7 @@ public class ReJadxLanguageServer implements LanguageServer, LanguageClientAware
 
         // Standard LSP features routed through jadx-core
         caps.setReferencesProvider(true);
+        caps.setDefinitionProvider(true);
         caps.setRenameProvider(true);
 
         // Custom commands dispatched via workspace/executeCommand

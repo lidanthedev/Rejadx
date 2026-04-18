@@ -126,10 +126,11 @@ public class JadxAdapter implements IDecompilerEngine {
                     String userSource = userCodeInfo.getCodeStr();
                     List<Integer> positions = userCls.getUsePlacesFor(userCodeInfo, searchNode);
                     String uri = JadxUriParser.build(userCls.getRawName(), SourceType.JAVA);
+                    int len = symbolLength(searchNode);
                     for (int pos : positions) {
                         if (results.size() >= XREF_LIMIT) break;
                         int[] lc = charOffsetToLineChar(userSource, pos);
-                        addXref(results, seen, uri, lc[0], lc[1]);
+                        addXref(results, seen, uri, lc[0], lc[1], len);
                     }
                 } catch (Exception e) {
                     log.warn("Skipping xref scan for class {}: {}", userCls.getFullName(), e.getMessage());
@@ -384,17 +385,39 @@ public class JadxAdapter implements IDecompilerEngine {
             }
             int[] lc = charOffsetToLineChar(declCode.getCodeStr(), defPos);
             String uri = JadxUriParser.build(declTop.getRawName(), SourceType.JAVA);
-            addXref(results, seen, uri, lc[0], lc[1]);
+            addXref(results, seen, uri, lc[0], lc[1], symbolLength(target));
         } catch (Exception e) {
             log.debug("Skipping declaration location for {}: {}", target, e.getMessage());
         }
     }
 
-    private static void addXref(List<XrefLocation> results, Set<String> seen, String uri, int line, int character) {
+    private static void addXref(List<XrefLocation> results, Set<String> seen, String uri, int line, int character, int length) {
         String key = uri + "#" + line + ":" + character;
         if (seen.add(key)) {
-            results.add(new XrefLocation(uri, line, character));
+            results.add(new XrefLocation(uri, line, character, Math.max(1, length)));
         }
+    }
+
+    public XrefLocation getDefinition(String rawClassName, int charOffset) throws ClassNotFoundException {
+        JavaClass cls = findClass(rawClassName);
+        ICodeInfo codeInfo = cls.getCodeInfo();
+        JavaNode target = resolveBestNodeAt(codeInfo, charOffset);
+        if (target == null) {
+            return null;
+        }
+
+        JavaClass declTop = topClass(target);
+        if (declTop == null) {
+            return null;
+        }
+        int defPos = target.getDefPos();
+        if (defPos < 0) {
+            return null;
+        }
+
+        int[] lc = charOffsetToLineChar(declTop.getCodeInfo().getCodeStr(), defPos);
+        String uri = JadxUriParser.build(declTop.getRawName(), SourceType.JAVA);
+        return new XrefLocation(uri, lc[0], lc[1], symbolLength(target));
     }
 
     private static List<JavaNode> buildUsageSearchNodes(JavaNode target) {
@@ -418,5 +441,10 @@ public class JadxAdapter implements IDecompilerEngine {
             }
         }
         return result;
+    }
+
+    private static int symbolLength(JavaNode node) {
+        String name = node.getName();
+        return name == null || name.isEmpty() ? 1 : name.length();
     }
 }

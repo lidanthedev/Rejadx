@@ -236,6 +236,45 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
     await vscode.commands.executeCommand('editor.action.rename');
   }));
+
+  context.subscriptions.push(vscode.languages.registerRenameProvider({ scheme: 'jadx' }, {
+    provideRenameEdits(document, position, newName, token) {
+      const client = getClient();
+      if (!client) {
+        throw new Error('Language server not ready');
+      }
+      return client.sendRequest('textDocument/rename', {
+        textDocument: { uri: document.uri.toString() },
+        position: { line: position.line, character: position.character },
+        newName
+      }, token) as Thenable<vscode.WorkspaceEdit>;
+    },
+    prepareRename(document, position, token) {
+      const client = getClient();
+      if (!client) {
+        return null;
+      }
+      return client.sendRequest('textDocument/definition', {
+        textDocument: { uri: document.uri.toString() },
+        position: { line: position.line, character: position.character }
+      }, token).then((defs) => {
+        const arr = defs as Array<{ uri: string; range: vscode.Range }> | undefined;
+        if (!arr || arr.length === 0) {
+          return null;
+        }
+        const same = arr.find(d => vscode.Uri.parse(d.uri).toString() === document.uri.toString());
+        if (same && same.range) {
+          return new vscode.Range(
+            same.range.start.line,
+            same.range.start.character,
+            same.range.end.line,
+            same.range.end.character
+          );
+        }
+        return new vscode.Range(position, position.translate(0, 1));
+      });
+    }
+  }));
 }
 
 export async function deactivate(): Promise<void> {

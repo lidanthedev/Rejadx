@@ -36,6 +36,8 @@ public interface IDecompilerEngine extends Closeable {
 
     List<XrefLocation> getReferences(String rawClassName, int charOffset, boolean includeDeclaration) throws ClassNotFoundException;
 
+    XrefLocation getDefinition(String rawClassName, int charOffset) throws ClassNotFoundException;
+
     // --- Node resolution (for rename + comment) ---
 
     ResolvedNode resolveNodeAt(String rawClassName, int charOffset) throws ClassNotFoundException;
