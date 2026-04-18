@@ -18,6 +18,13 @@ interface ExportMappingsResult {
   mapping: string;
 }
 
+interface SearchResult {
+  uri: string;
+  line: number;
+  character: number;
+  length: number;
+}
+
 interface CommentLookupResult {
   exists: boolean;
   comment: string;
@@ -549,6 +556,73 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     } catch (err) {
       vscode.window.showErrorMessage(`ReJadx: export mappings failed: ${err}`);
     }
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('jadx.searchCode', async () => {
+    const query = await vscode.window.showInputBox({
+      prompt: 'Search in decompiled code',
+      placeHolder: 'Enter text to search',
+      ignoreFocusOut: true
+    });
+    if (query === undefined || query.length === 0) {
+      return;
+    }
+
+    const mode = await vscode.window.showQuickPick([
+      { label: 'Plain (Case-insensitive)', caseSensitive: false, regex: false },
+      { label: 'Plain (Case-sensitive)', caseSensitive: true, regex: false },
+      { label: 'Regex (Case-insensitive)', caseSensitive: false, regex: true },
+      { label: 'Regex (Case-sensitive)', caseSensitive: true, regex: true }
+    ], {
+      title: 'Search mode',
+      ignoreFocusOut: true
+    });
+    if (!mode) {
+      return;
+    }
+
+    const maxResults = 50;
+    await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification,
+      title: `ReJadx search: "${query}"`,
+      cancellable: false
+    }, async () => {
+      const readyClient = getClient() ?? await ensureClientStarted();
+      try {
+        const hits = await readyClient.sendRequest('workspace/executeCommand', {
+          command: 'rejadx.searchCode',
+          arguments: [{
+            query,
+            caseSensitive: mode.caseSensitive,
+            regex: mode.regex,
+            maxResults
+          }]
+        }) as SearchResult[];
+
+        if (!Array.isArray(hits) || hits.length === 0) {
+          vscode.window.showInformationMessage(`ReJadx: no matches for "${query}".`);
+          return;
+        }
+
+        const locations = hits.map(h => new vscode.Location(
+          vscode.Uri.parse(h.uri),
+          new vscode.Range(h.line, h.character, h.line, h.character + Math.max(1, h.length))
+        ));
+
+        await vscode.commands.executeCommand(
+          'editor.action.showReferences',
+          locations[0].uri,
+          locations[0].range.start,
+          locations
+        );
+
+        if (hits.length >= maxResults) {
+          vscode.window.showInformationMessage(`ReJadx: showing first ${maxResults} matches for "${query}".`);
+        }
+      } catch (err) {
+        vscode.window.showErrorMessage(`ReJadx: search failed: ${err}`);
+      }
+    });
   }));
 }
 

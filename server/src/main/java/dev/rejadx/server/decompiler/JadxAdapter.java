@@ -7,6 +7,8 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -532,6 +534,60 @@ public class JadxAdapter implements IDecompilerEngine {
         int[] lc = charOffsetToLineChar(declTop.getCodeInfo().getCodeStr(), defPos);
         String uri = JadxUriParser.build(declTop.getRawName(), SourceType.JAVA);
         return new XrefLocation(uri, lc[0], lc[1], symbolLength(target));
+    }
+
+    @Override
+    public List<XrefLocation> searchCode(String query, boolean caseSensitive, boolean regex, int maxResults) {
+        if (query == null || query.isEmpty()) {
+            return Collections.emptyList();
+        }
+        int limit = maxResults > 0 ? maxResults : 500;
+
+        List<XrefLocation> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+
+        Pattern pattern = null;
+        if (regex) {
+            int flags = caseSensitive ? 0 : Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
+            pattern = Pattern.compile(query, flags);
+        }
+
+        String needle = regex ? null : (caseSensitive ? query : query.toLowerCase());
+
+        for (JavaClass cls : jadx.getClasses()) {
+            if (out.size() >= limit) {
+                break;
+            }
+            try {
+                String source = cls.getCode();
+                String uri = JadxUriParser.build(cls.getRawName(), SourceType.JAVA);
+
+                if (regex) {
+                    Matcher matcher = pattern.matcher(source);
+                    while (matcher.find() && out.size() < limit) {
+                        int idx = matcher.start();
+                        int len = Math.max(1, matcher.end() - matcher.start());
+                        int[] lc = charOffsetToLineChar(source, idx);
+                        addXref(out, seen, uri, lc[0], lc[1], len);
+                    }
+                } else {
+                    String hay = caseSensitive ? source : source.toLowerCase();
+                    int from = 0;
+                    while (from < hay.length() && out.size() < limit) {
+                        int idx = hay.indexOf(needle, from);
+                        if (idx < 0) {
+                            break;
+                        }
+                        int[] lc = charOffsetToLineChar(source, idx);
+                        addXref(out, seen, uri, lc[0], lc[1], query.length());
+                        from = idx + Math.max(1, needle.length());
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Skipping search in class {}: {}", cls.getFullName(), e.getMessage());
+            }
+        }
+        return out;
     }
 
     private static List<JavaNode> buildUsageSearchNodes(JavaNode target) {

@@ -20,6 +20,7 @@ import dev.rejadx.server.commands.GetPackagesCommand;
 import dev.rejadx.server.commands.GetSourceCommand;
 import dev.rejadx.server.commands.LoadProjectCommand;
 import dev.rejadx.server.commands.SaveProjectCommand;
+import dev.rejadx.server.commands.SearchCodeCommand;
 import dev.rejadx.server.manager.DecompilerManager;
 
 public class ReJadxWorkspaceService implements WorkspaceService {
@@ -30,6 +31,7 @@ public class ReJadxWorkspaceService implements WorkspaceService {
         commands.put("rejadx.loadProject",  new LoadProjectCommand(manager)::execute);
         commands.put("rejadx.getPackages",  new GetPackagesCommand(manager)::execute);
         commands.put("rejadx.getSource",    new GetSourceCommand(manager)::execute);
+        commands.put("rejadx.searchCode",   new SearchCodeCommand(manager)::execute);
         commands.put("rejadx.getComment",   new GetCommentCommand(manager)::execute);
         commands.put("rejadx.addComment",   new AddCommentCommand(manager)::execute);
         commands.put("rejadx.exportMappings", new ExportMappingsCommand(manager)::execute);

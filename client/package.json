@@ -63,6 +63,10 @@
       {
         "command": "jadx.exportProGuard",
         "title": "ReJadx: Export ProGuard Mappings"
+      },
+      {
+        "command": "jadx.searchCode",
+        "title": "ReJadx: Search in Decompiled Code"
       }
     ],
     "keybindings": [
@@ -75,6 +79,11 @@
         "command": "rejadx.renameAtCursor",
         "key": "f2",
         "when": "editorTextFocus && resourceScheme == 'jadx'"
+      },
+      {
+        "command": "jadx.searchCode",
+        "key": "ctrl+shift+f",
+        "when": "resourceScheme == 'jadx'"
       }
     ]
   },
