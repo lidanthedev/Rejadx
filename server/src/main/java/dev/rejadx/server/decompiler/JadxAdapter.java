@@ -643,6 +643,23 @@ public class JadxAdapter implements IDecompilerEngine {
     }
 
     @Override
+    public XrefLocation getClassDefinitionByName(String rawClassName) throws ClassNotFoundException {
+        JavaClass cls = findClass(rawClassName);
+        ICodeInfo codeInfo = cls.getCodeInfo();
+        String source = codeInfo.getCodeStr();
+        String className = cls.getName();
+        int idx = source.indexOf(className);
+        if (idx < 0) {
+            idx = Math.max(0, cls.getDefPos());
+        }
+        int[] lc = charOffsetToLineChar(source, idx);
+        return new XrefLocation(
+                JadxUriParser.build(cls.getRawName(), SourceType.JAVA),
+                lc[0], lc[1],
+                Math.max(1, className.length()));
+    }
+
+    @Override
     public List<XrefLocation> searchCode(String query, boolean caseSensitive, boolean regex, int maxResults) {
         if (query == null || query.isEmpty()) {
             return Collections.emptyList();

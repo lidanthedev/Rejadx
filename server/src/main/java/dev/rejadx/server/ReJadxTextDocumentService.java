@@ -137,6 +137,9 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 if (engine == null) return Either.forLeft(Collections.emptyList());
 
                 JadxUriParser.ParsedUri parsed = JadxUriParser.parse(uri);
+                if (parsed.sourceType() == SourceType.RESOURCE) {
+                    return definitionFromManifestResource(uri, pos, engine);
+                }
                 if (parsed.sourceType() != SourceType.JAVA) {
                     return Either.forLeft(Collections.emptyList());
                 }
@@ -282,5 +285,96 @@ public class ReJadxTextDocumentService implements TextDocumentService {
             return "html";
         }
         return "plaintext";
+    }
+
+    private Either<List<? extends Location>, List<? extends LocationLink>> definitionFromManifestResource(
+            String uri,
+            Position pos,
+            IDecompilerEngine engine
+    ) {
+        try {
+            String source = engine.getSource(JadxUriParser.parse(uri).rawClassName(), SourceType.RESOURCE);
+            int charOffset = lineCharToOffset(source, pos.getLine(), pos.getCharacter());
+            String token = extractXmlClassTokenAt(source, charOffset);
+            if (token == null || token.isEmpty()) {
+                return Either.forLeft(Collections.emptyList());
+            }
+
+            String normalized = normalizeManifestClassName(token, source);
+            if (normalized == null || normalized.isEmpty()) {
+                return Either.forLeft(Collections.emptyList());
+            }
+
+            XrefLocation def = engine.getClassDefinitionByName(normalized);
+            if (def == null) {
+                return Either.forLeft(Collections.emptyList());
+            }
+            Position start = new Position(def.getLine(), def.getCharacter());
+            Position end = new Position(def.getLine(), def.getCharacter() + def.getLength());
+            return Either.forLeft(List.of(new Location(def.getUri(), new Range(start, end))));
+        } catch (Exception e) {
+            return Either.forLeft(Collections.emptyList());
+        }
+    }
+
+    private static String extractXmlClassTokenAt(String source, int offset) {
+        if (source == null || source.isEmpty()) {
+            return null;
+        }
+        int len = source.length();
+        int pos = Math.max(0, Math.min(offset, len - 1));
+        if (!isXmlTokenChar(source.charAt(pos)) && pos > 0 && isXmlTokenChar(source.charAt(pos - 1))) {
+            pos -= 1;
+        }
+        if (!isXmlTokenChar(source.charAt(pos))) {
+            return null;
+        }
+
+        int start = pos;
+        while (start > 0 && isXmlTokenChar(source.charAt(start - 1))) {
+            start--;
+        }
+        int end = pos + 1;
+        while (end < len && isXmlTokenChar(source.charAt(end))) {
+            end++;
+        }
+
+        String token = source.substring(start, end);
+        if (!token.contains(".") && !token.startsWith(".")) {
+            return null;
+        }
+        return token;
+    }
+
+    private static boolean isXmlTokenChar(char ch) {
+        return Character.isLetterOrDigit(ch) || ch == '.' || ch == '_' || ch == '$';
+    }
+
+    private static String normalizeManifestClassName(String token, String source) {
+        if (token.startsWith(".")) {
+            String pkg = extractManifestPackage(source);
+            if (pkg == null || pkg.isEmpty()) {
+                return null;
+            }
+            return pkg + token;
+        }
+        return token;
+    }
+
+    private static String extractManifestPackage(String source) {
+        String marker = "package=\"";
+        int idx = source.indexOf(marker);
+        if (idx < 0) {
+            marker = "package='";
+            idx = source.indexOf(marker);
+            if (idx < 0) return null;
+        }
+        int start = idx + marker.length();
+        char quote = marker.endsWith("\"") ? '"' : '\'';
+        int end = source.indexOf(quote, start);
+        if (end < 0) {
+            return null;
+        }
+        return source.substring(start, end);
     }
 }
