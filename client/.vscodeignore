@@ -18,3 +18,6 @@ webpack.config.js
 !bin/jadx-server.jar
 !syntaxes/**
 !media/**
+
+# We no longer bundle JADX itself; user provides local JADX jar via settings.
+bin/jadx-*.jar

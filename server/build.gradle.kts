@@ -26,26 +26,11 @@ dependencies {
     // LSP4J — JSON-RPC / LSP 3.17 protocol implementation
     implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1")
 
-    // jadx-core is supplied via the composite build substitution in settings.gradle.kts.
-    // The Maven coordinate is transparently replaced with the :jadx-core source project.
-    implementation("io.github.skylot:jadx-core")
-    implementation("io.github.skylot:jadx-cli")
-    implementation("io.github.skylot:jadx-plugins-tools")
-
-    // Input + analysis plugins are loaded via ServiceLoader at runtime.
-    // Without these on runtimeClasspath, APK loading can appear to work but only
-    // trivial/resource classes are visible (no full dex class graph).
-    runtimeOnly("io.github.skylot:jadx-dex-input")
-    runtimeOnly("io.github.skylot:jadx-java-input")
-    runtimeOnly("io.github.skylot:jadx-java-convert")
-    runtimeOnly("io.github.skylot:jadx-smali-input")
-    runtimeOnly("io.github.skylot:jadx-rename-mappings")
-    runtimeOnly("io.github.skylot:jadx-kotlin-metadata")
-    runtimeOnly("io.github.skylot:jadx-kotlin-source-debug-extension")
-    runtimeOnly("io.github.skylot:jadx-xapk-input")
-    runtimeOnly("io.github.skylot:jadx-aab-input")
-    runtimeOnly("io.github.skylot:jadx-apkm-input")
-    runtimeOnly("io.github.skylot:jadx-apks-input")
+    // Jadx APIs are needed only for compilation. Runtime classes are supplied by
+    // the user-selected JADX fat jar (jadx-*-all.jar) via VS Code settings.
+    compileOnly("io.github.skylot:jadx-core")
+    compileOnly("io.github.skylot:jadx-cli")
+    compileOnly("io.github.skylot:jadx-plugins-tools")
 
     // SLF4J backend — routes jadx log output to stderr (never stdout, which is JSON-RPC)
     implementation("org.slf4j:slf4j-simple:2.0.12")
@@ -60,6 +45,8 @@ tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("all")
     archiveVersion.set("")
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    // Keep extension size small: JADX classes are provided by user-selected jar at runtime.
+    exclude("jadx/**")
     // Merge ServiceLoader descriptors so all JadxPlugin registrations survive bundling.
     // Without this, Shadow picks one arbitrarily and breaks jadx's plugin loading.
     mergeServiceFiles()
