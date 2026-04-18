@@ -52,7 +52,23 @@ async function hardRestartLanguageClient(): Promise<void> {
 
 function languageIdForJadxUri(uri: vscode.Uri): string {
   const q = uri.query || '';
-  return q.includes('type=smali') ? 'smali' : 'java';
+  if (q.includes('type=smali')) {
+    return 'smali';
+  }
+  if (uri.path.startsWith('/resources/')) {
+    const lower = uri.path.toLowerCase();
+    if (lower.endsWith('.xml')) {
+      return 'xml';
+    }
+    if (lower.endsWith('.json')) {
+      return 'json';
+    }
+    if (lower.endsWith('.html') || lower.endsWith('.htm')) {
+      return 'html';
+    }
+    return 'plaintext';
+  }
+  return 'java';
 }
 
 async function ensureJadxDocumentLanguage(doc: vscode.TextDocument): Promise<void> {

@@ -75,7 +75,11 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 rl.unlock();
             }
 
-            String langId = (parsed.sourceType() == SourceType.SMALI) ? "smali" : "java";
+            String langId = switch (parsed.sourceType()) {
+                case SMALI -> "smali";
+                case RESOURCE -> resourceLangId(uri);
+                default -> "java";
+            };
             pushSource(uri, source, langId);
         });
     }
@@ -95,6 +99,9 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 if (engine == null) return Collections.emptyList();
 
                 JadxUriParser.ParsedUri parsed = JadxUriParser.parse(uri);
+                if (parsed.sourceType() != SourceType.JAVA) {
+                    return Collections.emptyList();
+                }
                 String source = engine.getSource(parsed.rawClassName(), SourceType.JAVA);
                 int charOffset = lineCharToOffset(source, pos.getLine(), pos.getCharacter());
 
@@ -130,6 +137,9 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 if (engine == null) return Either.forLeft(Collections.emptyList());
 
                 JadxUriParser.ParsedUri parsed = JadxUriParser.parse(uri);
+                if (parsed.sourceType() != SourceType.JAVA) {
+                    return Either.forLeft(Collections.emptyList());
+                }
                 String source = engine.getSource(parsed.rawClassName(), SourceType.JAVA);
                 int charOffset = lineCharToOffset(source, pos.getLine(), pos.getCharacter());
                 XrefLocation def = engine.getDefinition(parsed.rawClassName(), charOffset);
@@ -163,6 +173,9 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 if (engine == null) throw new IllegalStateException("No project loaded");
 
                 JadxUriParser.ParsedUri parsed = JadxUriParser.parse(uri);
+                if (parsed.sourceType() != SourceType.JAVA) {
+                    return new WorkspaceEdit();
+                }
                 String oldSource = engine.getSource(parsed.rawClassName(), SourceType.JAVA);
                 int charOffset = lineCharToOffset(oldSource, pos.getLine(), pos.getCharacter());
 
@@ -255,5 +268,19 @@ public class ReJadxTextDocumentService implements TextDocumentService {
             }
         }
         return true;
+    }
+
+    private static String resourceLangId(String uri) {
+        String lower = uri.toLowerCase();
+        if (lower.endsWith(".xml")) {
+            return "xml";
+        }
+        if (lower.endsWith(".json")) {
+            return "json";
+        }
+        if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+            return "html";
+        }
+        return "plaintext";
     }
 }

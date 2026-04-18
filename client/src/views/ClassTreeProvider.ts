@@ -17,11 +17,16 @@ class ClassTreeItem extends vscode.TreeItem {
         : vscode.TreeItemCollapsibleState.None
     );
     this.tooltip = node.fullName;
-    this.contextValue = node.isPackage ? 'package' : 'class';
+    this.contextValue = node.isPackage ? 'package' : 'file';
+    if (node.isPackage) {
+      this.iconPath = new vscode.ThemeIcon('folder');
+    } else {
+      this.iconPath = new vscode.ThemeIcon('file');
+    }
     if (!node.isPackage && node.uri) {
       this.command = {
         command: 'vscode.open',
-        title: 'Open Class',
+        title: 'Open File',
         arguments: [vscode.Uri.parse(node.uri), { preview: false }],
       };
       this.resourceUri = vscode.Uri.parse(node.uri);

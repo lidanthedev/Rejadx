@@ -2,11 +2,14 @@ package dev.rejadx.server.model;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import jadx.api.JavaClass;
 import jadx.api.JavaPackage;
+import jadx.api.ResourceFile;
 
 import dev.rejadx.server.uri.JadxUriParser;
 
@@ -45,7 +48,7 @@ public class PackageNode {
         return new PackageNode(name, fullName, null, true, children);
     }
 
-    public static List<PackageNode> fromJadxPackages(List<JavaPackage> packages) {
+    public static List<PackageNode> fromJadx(List<JavaPackage> packages, List<ResourceFile> resources) {
         List<PackageNode> roots = new ArrayList<>();
         for (JavaPackage pkg : packages) {
             if (!pkg.isRoot()) {
@@ -68,7 +71,44 @@ public class PackageNode {
         }
 
         sortChildren(roots);
+
+        PackageNode resourcesRoot = fromResources(resources);
+        if (resourcesRoot != null) {
+            roots.add(0, resourcesRoot);
+        }
         return roots;
+    }
+
+    private static PackageNode fromResources(List<ResourceFile> resources) {
+        if (resources == null || resources.isEmpty()) {
+            return null;
+        }
+
+        MutableNode root = new MutableNode("Resources", "Resources", true, null);
+        for (ResourceFile rf : resources) {
+            String path = rf.getDeobfName();
+            if (path == null || path.isEmpty()) {
+                continue;
+            }
+            String[] parts = path.split("/");
+            MutableNode current = root;
+            StringBuilder full = new StringBuilder();
+            for (int i = 0; i < parts.length; i++) {
+                String part = parts[i];
+                if (part.isEmpty()) {
+                    continue;
+                }
+                if (full.length() > 0) {
+                    full.append('/');
+                }
+                full.append(part);
+                boolean leaf = (i == parts.length - 1);
+                current = current.child(part, full.toString(), !leaf,
+                        leaf ? JadxUriParser.buildResource(full.toString()) : null);
+            }
+        }
+
+        return root.toImmutable();
     }
 
     private static PackageNode fromJadxClass(JavaClass cls) {
@@ -83,6 +123,41 @@ public class PackageNode {
         nodes.sort(
                 Comparator.comparing(PackageNode::isPackage).reversed()
                         .thenComparing(PackageNode::getName, String.CASE_INSENSITIVE_ORDER));
+    }
+
+    private static final class MutableNode {
+        private final String name;
+        private final String fullName;
+        private final boolean isPackage;
+        private final String uri;
+        private final Map<String, MutableNode> byName = new HashMap<>();
+        private final List<MutableNode> ordered = new ArrayList<>();
+
+        private MutableNode(String name, String fullName, boolean isPackage, String uri) {
+            this.name = name;
+            this.fullName = fullName;
+            this.isPackage = isPackage;
+            this.uri = uri;
+        }
+
+        private MutableNode child(String name, String fullName, boolean isPackage, String uri) {
+            MutableNode existing = byName.get(name);
+            if (existing != null) {
+                return existing;
+            }
+            MutableNode created = new MutableNode(name, fullName, isPackage, uri);
+            byName.put(name, created);
+            ordered.add(created);
+            return created;
+        }
+
+        private PackageNode toImmutable() {
+            List<PackageNode> children = ordered.stream()
+                    .map(MutableNode::toImmutable)
+                    .collect(Collectors.toCollection(ArrayList::new));
+            sortChildren(children);
+            return new PackageNode(name, fullName, uri, isPackage, children);
+        }
     }
 
     public String getName() { return name; }

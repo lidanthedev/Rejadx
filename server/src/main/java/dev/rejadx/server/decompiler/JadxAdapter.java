@@ -21,6 +21,8 @@ import jadx.api.JavaField;
 import jadx.api.JavaMethod;
 import jadx.api.JavaNode;
 import jadx.api.ICodeInfo;
+import jadx.api.ResourceFile;
+import jadx.api.ResourceType;
 import jadx.api.data.CommentStyle;
 import jadx.api.data.ICodeComment;
 import jadx.api.data.ICodeRename;
@@ -164,7 +166,7 @@ public class JadxAdapter implements IDecompilerEngine {
 
     @Override
     public List<PackageNode> getPackageTree() {
-        return PackageNode.fromJadxPackages(jadx.getPackages());
+        return PackageNode.fromJadx(jadx.getPackages(), jadx.getResources());
     }
 
     @Override
@@ -176,9 +178,33 @@ public class JadxAdapter implements IDecompilerEngine {
 
     @Override
     public String getSource(String rawClassName, SourceType type) throws ClassNotFoundException {
+        if (type == SourceType.RESOURCE) {
+            return getResourceSource(rawClassName);
+        }
         JavaClass cls = findClass(rawClassName);
         // getCode() reads from the in-memory cache populated by saveSources() — fast path
         return (type == SourceType.SMALI) ? cls.getSmali() : cls.getCode();
+    }
+
+    private String getResourceSource(String resourcePath) throws ClassNotFoundException {
+        for (ResourceFile rf : jadx.getResources()) {
+            if (!rf.getDeobfName().equals(resourcePath)) {
+                continue;
+            }
+            try {
+                if (rf.getType() == ResourceType.MANIFEST
+                        || rf.getType() == ResourceType.XML
+                        || rf.getType() == ResourceType.JSON
+                        || rf.getType() == ResourceType.TEXT
+                        || rf.getType() == ResourceType.ARSC) {
+                    return rf.loadContent().getText().getCodeStr();
+                }
+                return "// Binary resource: " + rf.getDeobfName() + " (" + rf.getType() + ")";
+            } catch (Exception e) {
+                return "// Failed to decode resource " + rf.getDeobfName() + ": " + e.getMessage();
+            }
+        }
+        throw new ClassNotFoundException("Resource not found: " + resourcePath);
     }
 
     // --- Xrefs ---
