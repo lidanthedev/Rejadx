@@ -17,13 +17,20 @@ import jadx.api.JavaField;
 import jadx.api.JavaMethod;
 import jadx.api.JavaNode;
 import jadx.api.ICodeInfo;
+import jadx.api.data.CommentStyle;
 import jadx.api.data.ICodeComment;
 import jadx.api.data.ICodeRename;
 import jadx.api.data.IJavaNodeRef;
+import jadx.api.data.impl.JadxCodeRef;
 import jadx.api.data.impl.JadxCodeComment;
 import jadx.api.data.impl.JadxCodeData;
 import jadx.api.data.impl.JadxCodeRename;
 import jadx.api.data.impl.JadxNodeRef;
+import jadx.api.metadata.ICodeAnnotation;
+import jadx.api.metadata.ICodeMetadata;
+import jadx.api.metadata.ICodeNodeRef;
+import jadx.api.metadata.annotations.InsnCodeOffset;
+import jadx.api.metadata.annotations.NodeDeclareRef;
 
 import dev.rejadx.server.model.PackageNode;
 import dev.rejadx.server.model.ResolvedNode;
@@ -91,7 +98,7 @@ public class JadxAdapter implements IDecompilerEngine {
     public List<XrefLocation> getReferences(String rawClassName, int charOffset) throws ClassNotFoundException {
         JavaClass cls = findClass(rawClassName);
         ICodeInfo codeInfo = cls.getCodeInfo();
-        JavaNode target = jadx.getJavaNodeAtPosition(codeInfo, charOffset);
+        JavaNode target = resolveBestNodeAt(codeInfo, charOffset);
         if (target == null) {
             return Collections.emptyList();
         }
@@ -125,7 +132,7 @@ public class JadxAdapter implements IDecompilerEngine {
     public ResolvedNode resolveNodeAt(String rawClassName, int charOffset) throws ClassNotFoundException {
         JavaClass cls = findClass(rawClassName);
         ICodeInfo codeInfo = cls.getCodeInfo();
-        JavaNode node = jadx.getJavaNodeAtPosition(codeInfo, charOffset);
+        JavaNode node = resolveBestNodeAt(codeInfo, charOffset);
         if (node == null) return null;
 
         if (node instanceof JavaClass jcls) {
@@ -184,6 +191,20 @@ public class JadxAdapter implements IDecompilerEngine {
         return affected.getCode();
     }
 
+    @Override
+    public String addCommentAt(String rawClassName, int line, int character, String comment, CommentStyle style) throws Exception {
+        JavaClass cls = findClass(rawClassName);
+        ICodeInfo codeInfo = cls.getCodeInfo();
+        String source = codeInfo.getCodeStr();
+        int charOffset = lineCharToOffset(source, line, character);
+
+        JadxCodeComment codeComment = resolveCommentRef(cls, codeInfo, charOffset, comment, style);
+        if (codeComment == null) {
+            throw new IllegalArgumentException("No comment target at position (" + line + "," + character + ")");
+        }
+        return applyComment(codeComment);
+    }
+
     // --- State ---
 
     @Override
@@ -229,6 +250,97 @@ public class JadxAdapter implements IDecompilerEngine {
 
     private JavaClass topClass(JavaNode node) {
         return node.getTopParentClass();
+    }
+
+    private JavaNode resolveBestNodeAt(ICodeInfo codeInfo, int charOffset) {
+        JavaNode node = jadx.getJavaNodeAtPosition(codeInfo, charOffset);
+        if (node != null) {
+            return node;
+        }
+        node = jadx.getClosestJavaNode(codeInfo, charOffset);
+        if (node != null) {
+            return node;
+        }
+        return jadx.getEnclosingNode(codeInfo, charOffset);
+    }
+
+    private JadxCodeComment resolveCommentRef(JavaClass cls, ICodeInfo codeInfo, int pos, String text, CommentStyle style) {
+        ICodeMetadata metadata = codeInfo.getCodeMetadata();
+
+        int lineStartPos = lineStartOffset(codeInfo.getCodeStr(), pos);
+
+        // Method instruction comment (same strategy as jadx-gui CommentAction)
+        ICodeAnnotation offsetAnn = metadata.searchUp(pos, lineStartPos, ICodeAnnotation.AnnType.OFFSET);
+        if (offsetAnn instanceof InsnCodeOffset insnOffset) {
+            JavaNode node = jadx.getJavaNodeByRef(metadata.getNodeAt(pos));
+            if (node instanceof JavaMethod method) {
+                JadxNodeRef nodeRef = JadxNodeRef.forMth(method);
+                return new JadxCodeComment(nodeRef, JadxCodeRef.forInsn(insnOffset.getOffset()), text, style);
+            }
+        }
+
+        // Declaration on current line
+        ICodeNodeRef nodeDef = metadata.searchUp(pos, (off, ann) -> {
+            if (lineStartPos <= off && ann.getAnnType() == ICodeAnnotation.AnnType.DECLARATION) {
+                ICodeNodeRef defRef = ((NodeDeclareRef) ann).getNode();
+                if (defRef.getAnnType() != ICodeAnnotation.AnnType.VAR) {
+                    return defRef;
+                }
+            }
+            return null;
+        });
+        if (nodeDef != null) {
+            JavaNode defNode = jadx.getJavaNodeByRef(nodeDef);
+            JadxNodeRef nodeRef = JadxNodeRef.forJavaNode(defNode);
+            if (nodeRef != null) {
+                return new JadxCodeComment(nodeRef, text, style);
+            }
+        }
+
+        // Comment line above declaration
+        if (isCommentOnlyLine(codeInfo.getCodeStr(), lineStartPos)) {
+            ICodeNodeRef belowRef = metadata.searchDown(pos, (off, ann) -> {
+                if (off > pos && ann.getAnnType() == ICodeAnnotation.AnnType.DECLARATION) {
+                    return ((NodeDeclareRef) ann).getNode();
+                }
+                return null;
+            });
+            if (belowRef != null) {
+                JavaNode defNode = jadx.getJavaNodeByRef(belowRef);
+                JadxNodeRef nodeRef = JadxNodeRef.forJavaNode(defNode);
+                if (nodeRef != null) {
+                    return new JadxCodeComment(nodeRef, text, style);
+                }
+            }
+        }
+
+        // Fallback: attach to enclosing class declaration
+        JadxNodeRef clsRef = JadxNodeRef.forCls(cls);
+        return new JadxCodeComment(clsRef, text, style);
+    }
+
+    private static int lineCharToOffset(String source, int line, int character) {
+        int currentLine = 0;
+        for (int i = 0; i < source.length(); i++) {
+            if (currentLine == line) return i + character;
+            if (source.charAt(i) == '\n') currentLine++;
+        }
+        return source.length();
+    }
+
+    private static int lineStartOffset(String source, int pos) {
+        int p = Math.max(0, Math.min(pos, source.length()));
+        int idx = source.lastIndexOf('\n', Math.max(0, p - 1));
+        return idx == -1 ? 0 : idx + 1;
+    }
+
+    private static boolean isCommentOnlyLine(String source, int lineStartPos) {
+        int end = source.indexOf('\n', lineStartPos);
+        if (end == -1) {
+            end = source.length();
+        }
+        String line = source.substring(Math.max(0, lineStartPos), end).trim();
+        return line.startsWith("//") || (line.startsWith("/*") && line.endsWith("*/"));
     }
 
     private static int[] charOffsetToLineChar(String source, int offset) {

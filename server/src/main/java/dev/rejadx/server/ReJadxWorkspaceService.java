@@ -45,6 +45,17 @@ public class ReJadxWorkspaceService implements WorkspaceService {
         return handler.apply(params.getArguments());
     }
 
+    public CompletableFuture<Object> addCommentRequest(Map<String, Object> params) {
+        var handler = commands.get("rejadx.addComment");
+        if (handler == null) {
+            return CompletableFuture.failedFuture(new IllegalStateException("Comment command is not registered"));
+        }
+        if (params == null) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("jadx/addComment requires params"));
+        }
+        return handler.apply(List.of(params));
+    }
+
     @Override
     public void didChangeConfiguration(DidChangeConfigurationParams params) {
         // TODO: react to VS Code settings changes (e.g., jadx decompilation threads)

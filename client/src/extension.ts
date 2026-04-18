@@ -9,6 +9,26 @@ interface SourceReadyParams {
   languageId: string;
 }
 
+function languageIdForJadxUri(uri: vscode.Uri): string {
+  const q = uri.query || '';
+  return q.includes('type=smali') ? 'plaintext' : 'java';
+}
+
+async function ensureJadxDocumentLanguage(doc: vscode.TextDocument): Promise<void> {
+  if (doc.uri.scheme !== 'jadx') {
+    return;
+  }
+  const target = languageIdForJadxUri(doc.uri);
+  if (doc.languageId === target) {
+    return;
+  }
+  try {
+    await vscode.languages.setTextDocumentLanguage(doc, target);
+  } catch {
+    // Ignore language mode failures for virtual documents.
+  }
+}
+
 class JadxContentProvider implements vscode.TextDocumentContentProvider {
   private readonly _cache = new Map<string, string>();
   private readonly _inflight = new Map<string, Thenable<string>>();
@@ -18,6 +38,13 @@ class JadxContentProvider implements vscode.TextDocumentContentProvider {
   update(uriStr: string, content: string): void {
     const normalized = vscode.Uri.parse(uriStr).toString();
     this._cache.set(normalized, content);
+    this.onDidChangeEmitter.fire(vscode.Uri.parse(normalized));
+  }
+
+  invalidate(uriStr: string): void {
+    const normalized = vscode.Uri.parse(uriStr).toString();
+    this._cache.delete(normalized);
+    this._inflight.delete(normalized);
     this.onDidChangeEmitter.fire(vscode.Uri.parse(normalized));
   }
 
@@ -130,11 +157,72 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   lc.onNotification('rejadx/sourceReady', (params: SourceReadyParams) => {
     contentProvider.update(params.uri, params.content);
+
+    const uri = vscode.Uri.parse(params.uri);
+    const openDoc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
+    if (openDoc) {
+      const desired = params.languageId === 'smali' ? 'plaintext' : 'java';
+      if (openDoc.languageId !== desired) {
+        void vscode.languages.setTextDocumentLanguage(openDoc, desired).then(() => undefined, () => undefined);
+      }
+    }
   });
 
   lc.onNotification('rejadx/telemetry', (params: TelemetryUpdate) => {
     dashboardProvider.updateTelemetry(params);
   });
+
+  context.subscriptions.push(vscode.workspace.onDidOpenTextDocument((doc) => {
+    void ensureJadxDocumentLanguage(doc);
+  }));
+  for (const doc of vscode.workspace.textDocuments) {
+    void ensureJadxDocumentLanguage(doc);
+  }
+
+  context.subscriptions.push(vscode.commands.registerCommand('jadx.addComment', async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      return;
+    }
+
+    const uri = editor.document.uri;
+    if (uri.scheme !== 'jadx') {
+      vscode.window.showWarningMessage('ReJadx: Comments can only be added in jadx:// documents.');
+      return;
+    }
+
+    const comment = await vscode.window.showInputBox({
+      prompt: 'Add comment',
+      placeHolder: 'Enter comment text',
+      ignoreFocusOut: true,
+      validateInput: (value) => value.trim().length === 0 ? 'Comment cannot be empty' : null
+    });
+    if (!comment) {
+      return;
+    }
+
+    const client = getClient();
+    if (!client) {
+      vscode.window.showErrorMessage('ReJadx: Language server not ready.');
+      return;
+    }
+
+    const pos = editor.selection.active;
+    try {
+      await client.sendRequest('jadx/addComment', {
+        uri: uri.toString(),
+        line: pos.line,
+        character: pos.character,
+        comment: comment.trim(),
+        style: 'LINE'
+      });
+
+      // Force VS Code to re-fetch this virtual document.
+      contentProvider.invalidate(uri.toString());
+    } catch (err) {
+      vscode.window.showErrorMessage(`ReJadx: add comment failed: ${err}`);
+    }
+  }));
 }
 
 export async function deactivate(): Promise<void> {

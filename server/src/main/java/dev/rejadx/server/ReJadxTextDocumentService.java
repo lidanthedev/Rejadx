@@ -146,6 +146,9 @@ public class ReJadxTextDocumentService implements TextDocumentService {
                 // Apply rename (reloads affected classes internally)
                 String newSource = engine.applyRename(resolved.getNodeRef(), newName);
 
+                // Persist rename immediately to sidecar state file.
+                manager.saveCurrentProjectStateUnsafe();
+
                 // Build WorkspaceEdit replacing the full virtual document content
                 WorkspaceEdit edit = new WorkspaceEdit();
                 edit.setChanges(Map.of(uri, List.of(new TextEdit(fullDocRange, newSource))));

@@ -6,16 +6,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonElement;
 
 import jadx.api.data.CommentStyle;
-import jadx.api.data.impl.JadxCodeComment;
-import jadx.api.data.impl.JadxNodeRef;
 
 import dev.rejadx.server.decompiler.IDecompilerEngine;
 import dev.rejadx.server.manager.DecompilerManager;
-import dev.rejadx.server.model.ResolvedNode;
-import dev.rejadx.server.model.SourceType;
 import dev.rejadx.server.uri.JadxUriParser;
 
 /**
@@ -49,21 +44,11 @@ public class AddCommentCommand {
                 IDecompilerEngine engine = manager.getEngine();
                 if (engine == null) throw new IllegalStateException("No project loaded");
 
-                // Convert LSP line+character to char offset
-                String existingSource = engine.getSource(parsed.rawClassName(), SourceType.JAVA);
-                int charOffset = lineCharToOffset(existingSource, p.line, p.character);
-
-                // Resolve the node at this position
-                ResolvedNode resolved = engine.resolveNodeAt(parsed.rawClassName(), charOffset);
-                if (resolved == null) {
-                    throw new IllegalArgumentException("No renameable node at position (" + p.line + "," + p.character + ")");
-                }
-
                 CommentStyle style = "BLOCK".equalsIgnoreCase(p.style) ? CommentStyle.BLOCK : CommentStyle.LINE;
-                JadxCodeComment comment = new JadxCodeComment(
-                        (JadxNodeRef) resolved.getNodeRef(), p.comment, style);
+                String newSource = engine.addCommentAt(parsed.rawClassName(), p.line, p.character, p.comment, style);
 
-                String newSource = engine.applyComment(comment);
+                // Persist comment immediately to sidecar state file.
+                manager.saveCurrentProjectStateUnsafe();
 
                 // Push refreshed source to client (client's sourceReady handler updates the virtual doc)
                 if (manager.getClient() != null) {
@@ -78,15 +63,6 @@ public class AddCommentCommand {
                 wl.unlock();
             }
         });
-    }
-
-    private static int lineCharToOffset(String source, int line, int character) {
-        int currentLine = 0;
-        for (int i = 0; i < source.length(); i++) {
-            if (currentLine == line) return i + character;
-            if (source.charAt(i) == '\n') currentLine++;
-        }
-        return source.length();
     }
 
     private static class Params {

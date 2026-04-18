@@ -8,6 +8,12 @@
   "activationEvents": ["onStartupFinished"],
   "main": "./dist/extension.js",
   "contributes": {
+    "languages": [
+      {
+        "id": "java",
+        "extensions": [".java"]
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -30,7 +36,19 @@
         }
       ]
     },
-    "commands": []
+    "commands": [
+      {
+        "command": "jadx.addComment",
+        "title": "ReJadx: Add Comment"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "jadx.addComment",
+        "key": "ctrl+shift+c",
+        "when": "editorTextFocus && resourceScheme == 'jadx'"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

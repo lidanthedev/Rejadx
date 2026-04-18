@@ -22,8 +22,9 @@ class ClassTreeItem extends vscode.TreeItem {
       this.command = {
         command: 'vscode.open',
         title: 'Open Class',
-        arguments: [vscode.Uri.parse(node.uri)],
+        arguments: [vscode.Uri.parse(node.uri), { preview: false }],
       };
+      this.resourceUri = vscode.Uri.parse(node.uri);
     }
   }
 }

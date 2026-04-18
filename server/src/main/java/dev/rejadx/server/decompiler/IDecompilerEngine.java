@@ -4,6 +4,7 @@ import java.io.Closeable;
 import java.nio.file.Path;
 import java.util.List;
 
+import jadx.api.data.CommentStyle;
 import jadx.api.data.ICodeComment;
 import jadx.api.data.IJavaNodeRef;
 import jadx.api.data.impl.JadxCodeData;
@@ -52,6 +53,12 @@ public interface IDecompilerEngine extends Closeable {
      * Returns the new source of that class.
      */
     String applyComment(ICodeComment comment) throws Exception;
+
+    /**
+     * Creates and applies a comment at the given source position.
+     * Implementation may attach the comment either to an instruction or a node declaration.
+     */
+    String addCommentAt(String rawClassName, int line, int character, String comment, CommentStyle style) throws Exception;
 
     // --- State ---
 

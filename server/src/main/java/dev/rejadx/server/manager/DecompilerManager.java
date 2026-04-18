@@ -131,6 +131,17 @@ public class DecompilerManager {
         }
     }
 
+    /**
+     * Saves state to the default sidecar next to the current input file.
+     * Caller must hold the manager lock (read or write).
+     */
+    public void saveCurrentProjectStateUnsafe() throws Exception {
+        if (engine == null) throw new IllegalStateException("No project loaded");
+        if (currentInputFile == null) throw new IllegalStateException("No input file loaded");
+        Path stateFile = ProjectStateStore.defaultStateFile(currentInputFile);
+        ProjectStateStore.save(stateFile, currentInputFile, engine.getCodeData());
+    }
+
     public void shutdown() {
         if (telemetryFuture != null) telemetryFuture.cancel(false);
         telemetryScheduler.shutdown();
