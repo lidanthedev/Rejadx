@@ -48,6 +48,27 @@ function ensureJava21Available(): void {
   }
 }
 
+function parseJvmArgs(raw: unknown): string[] {
+  if (raw == null) {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    throw new Error("'rejadx.languageServer.jvmArgs' must be an array of strings.");
+  }
+
+  const out: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'string') {
+      throw new Error("'rejadx.languageServer.jvmArgs' must contain only strings.");
+    }
+    const trimmed = entry.trim();
+    if (trimmed.length > 0) {
+      out.push(trimmed);
+    }
+  }
+  return out;
+}
+
 export function validateConfiguredJadxJarPath(): JadxJarValidation {
   const rawPath = (getReJadxSettings().jadxJarPath ?? '').trim();
   if (!rawPath) {
@@ -118,9 +139,20 @@ export async function startLanguageClient(context: vscode.ExtensionContext): Pro
     throw new Error(msg);
   }
 
+  const settings = getReJadxSettings();
+  let jvmArgs: string[] = [];
+  try {
+    jvmArgs = parseJvmArgs(settings.languageServerJvmArgs);
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    const msg = `ReJadx: invalid 'rejadx.languageServer.jvmArgs' setting. ${reason}`;
+    vscode.window.showErrorMessage(msg);
+    throw new Error(msg);
+  }
+
   const serverOptions: ServerOptions = {
     command: 'java',
-    args: ['-cp', `${serverJar}${path.delimiter}${jadxJar.path}`, 'dev.rejadx.server.ReJadxServer'],
+    args: [...jvmArgs, '-cp', `${serverJar}${path.delimiter}${jadxJar.path}`, 'dev.rejadx.server.ReJadxServer'],
     transport: TransportKind.stdio,
     options: {
       env: { ...process.env }
@@ -158,6 +190,7 @@ export async function startLanguageClient(context: vscode.ExtensionContext): Pro
 export interface ReJadxClientSettings {
   searchMaxResults: number;
   customJadxArgs: string;
+  languageServerJvmArgs: string[];
   enableExternalPlugins: boolean;
   enableCodeCache: boolean;
   jadxJarPath: string;
@@ -167,10 +200,18 @@ export function getReJadxSettings(): ReJadxClientSettings {
   const cfg = vscode.workspace.getConfiguration('rejadx');
   const searchMaxResults = cfg.get<number>('search.maxResults', 50);
   const customJadxArgs = cfg.get<string>('customJadxArgs', '');
+  const languageServerJvmArgs = cfg.get<string[]>('languageServer.jvmArgs', []);
   const enableExternalPlugins = cfg.get<boolean>('enableExternalPlugins', false);
   const enableCodeCache = cfg.get<boolean>('enableCodeCache', true);
   const jadxJarPath = cfg.get<string>('jadxJarPath', '');
-  return { searchMaxResults, customJadxArgs, enableExternalPlugins, enableCodeCache, jadxJarPath };
+  return {
+    searchMaxResults,
+    customJadxArgs,
+    languageServerJvmArgs,
+    enableExternalPlugins,
+    enableCodeCache,
+    jadxJarPath
+  };
 }
 
 export async function stopLanguageClient(): Promise<void> {
