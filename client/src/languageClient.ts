@@ -48,26 +48,6 @@ function ensureJava21Available(): void {
   }
 }
 
-function parseJvmArgs(raw: unknown): string[] {
-  if (raw == null) {
-    return [];
-  }
-  if (!Array.isArray(raw)) {
-    throw new Error("'rejadx.languageServer.jvmArgs' must be an array of strings.");
-  }
-
-  const out: string[] = [];
-  for (const entry of raw) {
-    if (typeof entry !== 'string') {
-      throw new Error("'rejadx.languageServer.jvmArgs' must contain only strings.");
-    }
-    const trimmed = entry.trim();
-    if (trimmed.length > 0) {
-      out.push(trimmed);
-    }
-  }
-  return out;
-}
 
 export function validateConfiguredJadxJarPath(): JadxJarValidation {
   const rawPath = (getReJadxSettings().jadxJarPath ?? '').trim();
@@ -140,19 +120,10 @@ export async function startLanguageClient(context: vscode.ExtensionContext): Pro
   }
 
   const settings = getReJadxSettings();
-  let jvmArgs: string[] = [];
-  try {
-    jvmArgs = parseJvmArgs(settings.languageServerJvmArgs);
-  } catch (e) {
-    const reason = e instanceof Error ? e.message : String(e);
-    const msg = `ReJadx: invalid 'rejadx.languageServer.jvmArgs' setting. ${reason}`;
-    vscode.window.showErrorMessage(msg);
-    throw new Error(msg);
-  }
 
   const serverOptions: ServerOptions = {
     command: 'java',
-    args: [...jvmArgs, '-cp', `${serverJar}${path.delimiter}${jadxJar.path}`, 'dev.rejadx.server.ReJadxServer'],
+    args: [...settings.languageServerJvmArgs, '-cp', `${serverJar}${path.delimiter}${jadxJar.path}`, 'dev.rejadx.server.ReJadxServer'],
     transport: TransportKind.stdio,
     options: {
       env: { ...process.env }
