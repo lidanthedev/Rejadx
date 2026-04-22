@@ -18,6 +18,15 @@
   "activationEvents": [
     "onStartupFinished"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "JVM arguments for the language server are restricted in untrusted workspaces.",
+      "restrictedConfigurations": [
+        "rejadx.languageServer.jvmArgs"
+      ]
+    }
+  },
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
@@ -33,7 +42,16 @@
         "rejadx.customJadxArgs": {
           "type": "string",
           "default": "",
-          "description": "Custom Jadx CLI-style arguments passed to ReJadx server on project load (for example: --threads-count=4 --decompilation-mode=simple). Restart server to apply changes."
+          "description": "Custom Jadx CLI-style arguments passed to the Jadx decompiler on project load (for example: --threads-count=4 --decompilation-mode=simple). For Java/JVM process flags, use 'rejadx.languageServer.jvmArgs'. Restart server to apply changes."
+        },
+        "rejadx.languageServer.jvmArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "restricted": true,
+          "default": [],
+          "description": "Additional JVM options passed to the Java process that runs the ReJadx language server (for example: [\"-Xmx8G\", \"-XX:MaxRAMPercentage=70.0\"]). Restart server to apply changes."
         },
         "rejadx.enableExternalPlugins": {
           "type": "boolean",
