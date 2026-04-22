@@ -10,6 +10,7 @@ It provides jadx-style workflows inside VS Code, including:
 - Rename and comment support with persisted project state
 - Decompiled code search and mappings export
 - Dashboard controls for open/restart/stop and runtime telemetry
+- Custom JVM And Jadx arguments
 
 ## Screenshots
 ### Code View
@@ -33,6 +34,7 @@ It provides jadx-style workflows inside VS Code, including:
 - VS Code `^1.85.0`
 - Java 21+ runtime (required to run the bundled language server)
 - Node.js 20+ (for development)
+- Jadx
 
 ## Development
 
